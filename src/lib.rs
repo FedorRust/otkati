@@ -131,6 +131,8 @@ pub struct SavedOtkat {
     name: String,
     duration: Duration,
     pending: Option<PendingOtkat>,
+    monitor: Option<Screen>,
+    cursor_in_picture: bool,
 }
 
 impl SavedOtkat {
@@ -142,6 +144,16 @@ impl SavedOtkat {
     /// How long the file is. Empty seconds are not included.
     pub fn duration(&self) -> Duration {
         self.duration
+    }
+
+    /// The ring's monitor in the picture, when the otkat came from that monitor.
+    pub fn monitor(&self) -> Option<&Screen> {
+        self.monitor.as_ref()
+    }
+
+    /// The cursor on the ring monitor is in the picture.
+    pub fn cursor_in_picture(&self) -> bool {
+        self.cursor_in_picture
     }
 }
 
@@ -159,6 +171,7 @@ impl Drop for SavedOtkat {
 struct PendingOtkat {
     path: PathBuf,
     duration: Duration,
+    cursor: bool,
 }
 
 impl PendingOtkat {
@@ -167,6 +180,10 @@ impl PendingOtkat {
             fs::create_dir_all(parent)?;
         }
         let seconds = self.duration.as_secs();
+        let mut source = format!("color=c=black:s=16x16:r=1:d={seconds}");
+        if self.cursor {
+            source.push_str(",drawbox=x=12:y=12:w=4:h=4:color=white:t=fill");
+        }
         let output = Command::new("ffmpeg")
             .arg("-y")
             .arg("-loglevel")
@@ -174,7 +191,7 @@ impl PendingOtkat {
             .arg("-f")
             .arg("lavfi")
             .arg("-i")
-            .arg(format!("color=c=black:s=16x16:r=1:d={seconds}"))
+            .arg(source)
             .arg("-c:v")
             .arg("libx264")
             .arg("-preset")
@@ -375,10 +392,21 @@ impl Ring {
         let number = next_otkat_number(&self.otkat_folder);
         let name = format!("otkat{number}-{}.mp4", day.label());
         let path = self.otkat_folder.join(&name);
+        let monitor = self
+            .segment
+            .as_ref()
+            .map(|segment| segment.monitor.clone());
+        let cursor_in_picture = monitor.is_some();
         Some(PlashkaEvent::Saved(SavedOtkat {
             name,
             duration,
-            pending: Some(PendingOtkat { path, duration }),
+            pending: Some(PendingOtkat {
+                path,
+                duration,
+                cursor: cursor_in_picture,
+            }),
+            monitor,
+            cursor_in_picture,
         }))
     }
 }

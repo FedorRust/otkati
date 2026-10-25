@@ -1,5 +1,6 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -89,4 +90,55 @@ fn before_the_screen_answer_a_monitor_does_not_enter_the_ring() {
         written.is_empty(),
         "a monitor before the screen answer must not put a file in the otkat folder"
     );
+}
+
+#[test]
+fn the_cursor_on_the_ring_monitor_is_in_the_otkat_picture() {
+    let folder = OtkatFolder::new();
+    let screen = Screen::new("Alexey's screen");
+    let mut ring = Ring::enter_session(folder.path.clone(), None);
+    ring.remember_screen(screen.clone());
+    ring.take_monitor(MonitorMoment::new(screen.clone(), Duration::from_secs(2)));
+
+    let event = ring.bind(Ring::default_bind());
+
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.monitor(), Some(&screen));
+    assert!(saved.cursor_in_picture());
+    let path = folder.path.join(saved.name());
+    assert!(
+        !path.exists(),
+        "the success plashka comes out before the file is in the folder"
+    );
+    drop(event);
+
+    assert!(
+        picture_shows_a_cursor(&path),
+        "the cursor on the ring monitor is visible in the otkat picture"
+    );
+}
+
+fn picture_shows_a_cursor(path: &Path) -> bool {
+    let output = Command::new("ffmpeg")
+        .arg("-v")
+        .arg("error")
+        .arg("-i")
+        .arg(path)
+        .arg("-frames:v")
+        .arg("1")
+        .arg("-f")
+        .arg("rawvideo")
+        .arg("-pix_fmt")
+        .arg("rgb24")
+        .arg("-")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "ffmpeg failed to read the picture: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    output.stdout.iter().any(|byte| *byte != 0)
 }
