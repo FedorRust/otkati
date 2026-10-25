@@ -21,6 +21,11 @@ Window {
         RingOff
     }
 
+    enum RingPlace {
+        Memory,
+        Disk
+    }
+
     readonly property var colorKeys: [
         "base", "mantle", "crust", "text", "subtext0", "subtext1",
         "surface0", "surface1", "surface2", "overlay0", "overlay1", "overlay2",
@@ -53,6 +58,8 @@ Window {
     property string bind: "Alt+Z"
     // The length, in seconds, the face hands to the ring. Ten minutes until the person changes it.
     property int length: 600
+    // The ring place the face hands to the ring. Memory until the person chooses disk.
+    property int ringPlace: Face.RingPlace.Memory
     // The switch the face hands to the ring. On until the person turns the ring off.
     property bool ringOn: true
     // Reported by the shell. The program language does not follow either value.
@@ -234,6 +241,10 @@ Window {
         if (!Number.isInteger(seconds) || seconds < 15 || seconds > 1200)
             return
         length = seconds
+    }
+
+    function setRingPlace(place) {
+        ringPlace = place
     }
 
     function setSwitch(gathering) {

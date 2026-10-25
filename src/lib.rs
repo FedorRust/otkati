@@ -3,6 +3,15 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+/// Where the encoded ring lies until an otkat is saved from it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RingPlace {
+    /// The ring stays in memory. This is the place until the person chooses disk.
+    Memory,
+    /// The encoded ring lies in the ring folder.
+    Disk,
+}
+
 /// The key combination that asks the ring to save an otkat.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bind {
@@ -191,6 +200,8 @@ pub struct Ring {
     waiting_for_screen: bool,
     screen: Option<Screen>,
     bind: Bind,
+    ring_place: RingPlace,
+    ring_folder: PathBuf,
     switch: Switch,
 }
 
@@ -210,9 +221,54 @@ impl Ring {
         folder
     }
 
+    /// `~/.local/state/otkati/ring`, where the encoded ring lies when the place is disk.
+    pub fn default_ring_folder() -> PathBuf {
+        ring_folder_under(&home_dir())
+    }
+
     /// `otkat_folder` is where a saved otkat is written.
     pub fn new(otkat_folder: impl Into<PathBuf>) -> Self {
         Self::with_clock(otkat_folder, system_bind_day)
+    }
+
+    /// `home` roots the ring folder `home/.local/state/otkati/ring`.
+    /// [`Ring::new`] uses the process home. A new ring stays in memory.
+    pub fn with_home(otkat_folder: impl Into<PathBuf>, home: impl Into<PathBuf>) -> Self {
+        let mut ring = Self::new(otkat_folder);
+        ring.ring_folder = ring_folder_under(&home.into());
+        ring
+    }
+
+    /// Where the encoded ring lies. A new ring is in memory.
+    pub fn place(&self) -> RingPlace {
+        self.ring_place
+    }
+
+    /// The folder that holds the encoded ring when the place is disk.
+    pub fn ring_folder(&self) -> Option<&Path> {
+        match self.ring_place {
+            RingPlace::Memory => None,
+            RingPlace::Disk => Some(&self.ring_folder),
+        }
+    }
+
+    /// The face hands the ring a place.
+    ///
+    /// A different place starts the ring over: minutes already held are
+    /// dropped and nothing is written to the otkat folder. The same place
+    /// leaves those minutes. Disk puts the encoded ring in the ring folder
+    /// and creates that folder.
+    pub fn take_place(&mut self, place: RingPlace) {
+        if self.ring_place == place {
+            return;
+        }
+        self.held = Duration::ZERO;
+        self.ring_place = place;
+        if place == RingPlace::Disk {
+            if let Err(err) = fs::create_dir_all(&self.ring_folder) {
+                eprintln!("ring folder was not created: {err}");
+            }
+        }
     }
 
     /// `clock` answers the bind day. [`Ring::new`] uses the local calendar day.
@@ -228,6 +284,8 @@ impl Ring {
             waiting_for_screen: false,
             screen: None,
             bind: Self::default_bind(),
+            ring_place: RingPlace::Memory,
+            ring_folder: ring_folder_under(&home_dir()),
             switch: Switch::On,
         }
     }
@@ -249,6 +307,8 @@ impl Ring {
             waiting_for_screen,
             screen: remembered,
             bind: Self::default_bind(),
+            ring_place: RingPlace::Memory,
+            ring_folder: ring_folder_under(&home_dir()),
             switch: Switch::On,
         }
     }
@@ -363,6 +423,16 @@ impl Ring {
             pending: Some(PendingOtkat { path, duration }),
         }))
     }
+}
+
+fn home_dir() -> PathBuf {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn ring_folder_under(home: &Path) -> PathBuf {
+    home.join(".local/state/otkati/ring")
 }
 
 fn next_otkat_number(folder: &Path) -> u32 {
