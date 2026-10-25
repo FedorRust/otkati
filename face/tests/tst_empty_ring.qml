@@ -41,4 +41,15 @@ TestCase {
         compare(face.visible, true)
         tryCompare(face, "visible", false, 1200)
     }
+
+    function test_empty_ring_plashka_leaves_focus_in_the_game() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.showPlashka(Face.PlashkaEvent.NothingToSave)
+        compare(face.visible, true)
+        verify(face.flags & Qt.WindowDoesNotAcceptFocus)
+        ignoreWarning(/requestActivate\(\) called for .*WindowDoesNotAcceptFocus set\./)
+        face.requestActivate()
+        compare(face.active, false)
+    }
 }

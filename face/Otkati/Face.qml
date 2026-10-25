@@ -6,6 +6,7 @@ Window {
     width: 360
     height: 80
     visible: false
+    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
 
     enum PlashkaEvent {
         NothingToSave
