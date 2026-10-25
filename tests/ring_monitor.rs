@@ -170,3 +170,49 @@ fn a_disconnected_monitor_moves_the_ring_to_the_one_that_remains() {
         "the otkat from the monitor that remains is written after the plashka"
     );
 }
+
+#[test]
+fn a_new_choice_sets_the_ring_monitor_again() {
+    let folder = OtkatFolder::new();
+    let desk = Screen::new("desk");
+    let laptop = Screen::new("laptop");
+    let mut ring = Ring::enter_session(folder.path.clone(), Some(desk.clone()));
+    ring.take_monitor(MonitorMoment::new(desk.clone(), Duration::from_secs(4)));
+    ring.see_connected_monitors(&[ConnectedMonitor::new(
+        laptop.clone(),
+        (1920, 0),
+        false,
+        "HDMI-A-1",
+    )]);
+    assert_eq!(ring.monitor(), Some(&laptop));
+
+    ring.see_connected_monitors(&[
+        ConnectedMonitor::new(desk.clone(), (0, 0), true, "DP-1"),
+        ConnectedMonitor::new(laptop.clone(), (1920, 0), false, "HDMI-A-1"),
+    ]);
+    assert_eq!(
+        ring.monitor(),
+        Some(&laptop),
+        "the disconnected monitor coming back does not undo the move"
+    );
+
+    ring.take_ring_monitor(desk.clone());
+
+    assert_eq!(ring.monitor(), Some(&desk));
+    ring.take_monitor(MonitorMoment::new(laptop, Duration::from_secs(8)));
+    let segment = ring.segment().expect("the ring does not go empty");
+    assert_eq!(segment.monitor(), &desk);
+    assert_eq!(segment.duration(), Duration::from_secs(4));
+    ring.take_monitor(MonitorMoment::new(desk.clone(), Duration::from_secs(2)));
+    let segment = ring.segment().expect("the new choice entered the ring");
+    assert_eq!(segment.monitor(), &desk);
+    assert_eq!(segment.duration(), Duration::from_secs(6));
+
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat from the monitor the person chose again, got {event:?}");
+    };
+    assert_eq!(saved.monitor(), Some(&desk));
+    assert_eq!(saved.duration(), Duration::from_secs(6));
+    drop(event);
+}
