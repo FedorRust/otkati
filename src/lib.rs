@@ -175,8 +175,8 @@ impl PendingOtkat {
     }
 }
 
-/// The length the ring aims to hold until the length knob exists: 10 minutes.
-const CHOSEN_LENGTH: Duration = Duration::from_secs(10 * 60);
+/// Ten minutes, until the face hands a different length.
+const DEFAULT_LENGTH: Duration = Duration::from_secs(10 * 60);
 
 /// Encoded seconds the ring holds, and the bind that asks to save an otkat.
 ///
@@ -186,6 +186,7 @@ const CHOSEN_LENGTH: Duration = Duration::from_secs(10 * 60);
 pub struct Ring {
     otkat_folder: PathBuf,
     held: Duration,
+    chosen_length: Duration,
     clock: Box<dyn Fn() -> BindDay + Send>,
     waiting_for_screen: bool,
     screen: Option<Screen>,
@@ -222,6 +223,7 @@ impl Ring {
         Self {
             otkat_folder: otkat_folder.into(),
             held: Duration::ZERO,
+            chosen_length: DEFAULT_LENGTH,
             clock: Box::new(clock),
             waiting_for_screen: false,
             screen: None,
@@ -242,6 +244,7 @@ impl Ring {
         Self {
             otkat_folder: otkat_folder.into(),
             held: Duration::ZERO,
+            chosen_length: DEFAULT_LENGTH,
             clock: Box::new(system_bind_day),
             waiting_for_screen,
             screen: remembered,
@@ -304,6 +307,21 @@ impl Ring {
         }
     }
 
+    /// The face hands the ring the length it aims to hold.
+    ///
+    /// The length is a whole number of seconds from 15 through 20 minutes.
+    /// Anything else leaves the aim unchanged.
+    pub fn take_length(&mut self, length: Duration) {
+        if length.subsec_nanos() != 0 {
+            return;
+        }
+        let seconds = length.as_secs();
+        if !(15..=20 * 60).contains(&seconds) {
+            return;
+        }
+        self.chosen_length = Duration::from_secs(seconds);
+    }
+
     /// The face hands the ring a new bind.
     ///
     /// The ring saves on that chord, and the previous chord no longer does.
@@ -335,7 +353,7 @@ impl Ring {
             return Some(PlashkaEvent::NothingToSave);
         }
         let day = (self.clock)();
-        let duration = self.held.min(CHOSEN_LENGTH);
+        let duration = self.held.min(self.chosen_length);
         let number = next_otkat_number(&self.otkat_folder);
         let name = format!("otkat{number}-{}.mp4", day.label());
         let path = self.otkat_folder.join(&name);

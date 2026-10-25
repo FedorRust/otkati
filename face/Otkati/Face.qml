@@ -51,6 +51,8 @@ Window {
     readonly property bool settingsVisible: settingsSurface ? settingsSurface.visible : false
     // The bind the face hands to the ring. Alt+Z until the person changes it.
     property string bind: "Alt+Z"
+    // The length, in seconds, the face hands to the ring. Ten minutes until the person changes it.
+    property int length: 600
     // The switch the face hands to the ring. On until the person turns the ring off.
     property bool ringOn: true
     // Reported by the shell. The program language does not follow either value.
@@ -226,6 +228,12 @@ Window {
 
     function setBind(chord) {
         bind = chord
+    }
+
+    function setLength(seconds) {
+        if (!Number.isInteger(seconds) || seconds < 15 || seconds > 1200)
+            return
+        length = seconds
     }
 
     function setSwitch(gathering) {
