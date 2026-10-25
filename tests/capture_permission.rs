@@ -91,3 +91,29 @@ fn a_remembered_screen_with_no_frame_still_reports_nothing_to_save() {
         "a remembered screen with no frame must not put a file in the otkat folder"
     );
 }
+
+#[test]
+fn output_sound_and_microphone_do_not_raise_the_screen_question() {
+    let folder = OtkatFolder::new();
+    let screen = Screen::new("Alexey's screen");
+    let mut ring = Ring::enter_session(folder.path.clone(), Some(screen.clone()));
+
+    ring.output_sound();
+    ring.microphone();
+
+    assert!(!ring.asks_which_screen());
+    assert_eq!(ring.monitor(), Some(&screen));
+}
+
+#[test]
+fn output_sound_and_microphone_do_not_answer_the_screen_question() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::enter_session(folder.path.clone(), None);
+
+    ring.output_sound();
+    ring.microphone();
+
+    assert!(ring.asks_which_screen());
+    assert!(ring.monitor().is_none());
+    assert_eq!(ring.bind(), PlashkaEvent::NoAccess);
+}

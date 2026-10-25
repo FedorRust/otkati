@@ -104,6 +104,12 @@ impl Ring {
         self.screen.as_ref()
     }
 
+    /// Output sound arrived. It does not ask which screen to give.
+    pub fn output_sound(&mut self) {}
+
+    /// The microphone arrived. It does not ask which screen to give.
+    pub fn microphone(&mut self) {}
+
     /// The bind was pressed.
     ///
     /// An empty ring answers with [`PlashkaEvent::NothingToSave`] and does not
