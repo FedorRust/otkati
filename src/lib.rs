@@ -133,6 +133,8 @@ pub struct SavedOtkat {
     pending: Option<PendingOtkat>,
     monitor: Option<Screen>,
     cursor_in_picture: bool,
+    output_sound: bool,
+    microphone: bool,
 }
 
 impl SavedOtkat {
@@ -155,6 +157,16 @@ impl SavedOtkat {
     pub fn cursor_in_picture(&self) -> bool {
         self.cursor_in_picture
     }
+
+    /// Output sound is in the clip.
+    pub fn output_sound(&self) -> bool {
+        self.output_sound
+    }
+
+    /// The microphone is in the clip.
+    pub fn microphone(&self) -> bool {
+        self.microphone
+    }
 }
 
 impl Drop for SavedOtkat {
@@ -172,6 +184,8 @@ struct PendingOtkat {
     path: PathBuf,
     duration: Duration,
     cursor: bool,
+    output_sound: bool,
+    microphone: bool,
 }
 
 impl PendingOtkat {
@@ -184,21 +198,46 @@ impl PendingOtkat {
         if self.cursor {
             source.push_str(",drawbox=x=12:y=12:w=4:h=4:color=white:t=fill");
         }
-        let output = Command::new("ffmpeg")
+        let with_sound = self.output_sound && self.microphone;
+        let mut command = Command::new("ffmpeg");
+        command
             .arg("-y")
             .arg("-loglevel")
             .arg("error")
             .arg("-f")
             .arg("lavfi")
             .arg("-i")
-            .arg(source)
+            .arg(source);
+        if with_sound {
+            command
+                .arg("-f")
+                .arg("lavfi")
+                .arg("-i")
+                .arg(format!("sine=frequency=440:sample_rate=48000:d={seconds}"))
+                .arg("-f")
+                .arg("lavfi")
+                .arg("-i")
+                .arg(format!("sine=frequency=880:sample_rate=48000:d={seconds}"))
+                .arg("-map")
+                .arg("0:v")
+                .arg("-map")
+                .arg("1:a")
+                .arg("-map")
+                .arg("2:a");
+        }
+        command
             .arg("-c:v")
             .arg("libx264")
             .arg("-preset")
             .arg("ultrafast")
             .arg("-pix_fmt")
-            .arg("yuv420p")
-            .arg("-an")
+            .arg("yuv420p");
+        if with_sound {
+            command.arg("-c:a").arg("aac");
+        } else {
+            command.arg("-an");
+        }
+        let output = command
             .arg(&self.path)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -348,9 +387,15 @@ impl Ring {
     }
 
     /// Output sound arrived. It does not ask which screen to give.
+    ///
+    /// A live ring already keeps output sound with the microphone. This does
+    /// not turn the clip into microphone only.
     pub fn output_sound(&mut self) {}
 
     /// The microphone arrived. It does not ask which screen to give.
+    ///
+    /// While the ring holds its monitor, the microphone is in the clip.
+    /// There is no microphone-only mode to turn on.
     pub fn microphone(&mut self) {}
 
     /// The ring holds `held` of encoded time.
@@ -396,7 +441,10 @@ impl Ring {
             .segment
             .as_ref()
             .map(|segment| segment.monitor.clone());
-        let cursor_in_picture = monitor.is_some();
+        let live = monitor.is_some();
+        let cursor_in_picture = live;
+        let output_sound = live;
+        let microphone = live;
         Some(PlashkaEvent::Saved(SavedOtkat {
             name,
             duration,
@@ -404,9 +452,13 @@ impl Ring {
                 path,
                 duration,
                 cursor: cursor_in_picture,
+                output_sound,
+                microphone,
             }),
             monitor,
             cursor_in_picture,
+            output_sound,
+            microphone,
         }))
     }
 }

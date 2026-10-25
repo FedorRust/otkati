@@ -142,3 +142,54 @@ fn picture_shows_a_cursor(path: &Path) -> bool {
     );
     output.stdout.iter().any(|byte| *byte != 0)
 }
+
+#[test]
+fn a_live_otkat_includes_output_sound_and_the_microphone() {
+    let folder = OtkatFolder::new();
+    let screen = Screen::new("Alexey's screen");
+    let mut ring = Ring::enter_session(folder.path.clone(), None);
+    ring.remember_screen(screen.clone());
+    ring.take_monitor(MonitorMoment::new(screen, Duration::from_secs(2)));
+    ring.output_sound();
+    ring.microphone();
+
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert!(saved.output_sound());
+    assert!(saved.microphone());
+    let path = folder.path.join(saved.name());
+    drop(event);
+
+    assert_eq!(
+        audio_stream_count(&path),
+        2,
+        "the otkat keeps output sound and the microphone as two streams"
+    );
+}
+
+fn audio_stream_count(path: &Path) -> usize {
+    let output = Command::new("ffprobe")
+        .arg("-v")
+        .arg("error")
+        .arg("-select_streams")
+        .arg("a")
+        .arg("-show_entries")
+        .arg("stream=index")
+        .arg("-of")
+        .arg("csv=p=0")
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "ffprobe failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .filter(|line| !line.is_empty())
+        .count()
+}
