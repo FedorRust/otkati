@@ -12,7 +12,8 @@ Window {
         NothingToSave,
         Saved,
         ClipNotSaved,
-        NoAccess
+        NoAccess,
+        RingOff
     }
 
     property color themeColor: "#000000"
@@ -138,7 +139,7 @@ Window {
     }
 
     function showPlashka(event) {
-        if (event === Face.PlashkaEvent.Saved || event === Face.PlashkaEvent.NoAccess) {
+        if (event === Face.PlashkaEvent.Saved || event === Face.PlashkaEvent.NoAccess || event === Face.PlashkaEvent.RingOff) {
             plashka.event = event
             plashka.alarm = false
             label.text = ""
