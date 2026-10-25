@@ -87,6 +87,25 @@ TestCase {
         compare(face.firstLaunchHeight, 1080)
     }
 
+    function test_without_a_ring_monitor_the_overlay_does_not_cover_another() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.cataloguePath = filePath("themes")
+        face.shellSettingsPath = filePath("shell-north.json")
+        face.matugenColorsPath = filePath("matugen-colors.json")
+        face.themeStorePath = freshStore()
+        face.monitors = [
+            { name: "origin", x: 0, y: 0, width: 1920, height: 1080, focused: true, connector: "DP-1" },
+            { name: "side", x: 1920, y: 0, width: 1280, height: 800, focused: false, connector: "HDMI-A-1" }
+        ]
+        face.ringMonitor = ""
+        face.openSettings()
+
+        compare(face.overlayCovers("origin"), false)
+        compare(face.overlayCovers("side"), false)
+        compare(face.firstLaunchVisible, false)
+    }
+
     function test_the_overlay_wipes_then_types_four_lines_then_fills_the_penguin() {
         const face = faceOn("shell-north.json", freshStore())
         const lines = [

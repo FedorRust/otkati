@@ -155,9 +155,11 @@ TestCase {
         compare(face.readyThemes.join(","), "Matugen,North,South")
 
         face.setTheme("#ff00ff")
-        compare(face.themeColor, "#ff00ff")
+        compare(face.themeColor, "#101418")
         compare(face.themeName, "North")
         compare(face.settingsColor, "#101418")
+        face.showPlashka(Face.PlashkaEvent.Ordinary)
+        compare(face.plashkaColor, "#101418")
 
         face.setTheme("Not a theme")
         compare(face.themeName, "North")
@@ -262,6 +264,24 @@ TestCase {
         compare(face.settingsColor, "#112233")
         compare(face.themeColors.text, "#abcabc")
         compare(face.themeColors.blue, "#445566")
+    }
+
+    function test_a_shell_theme_without_an_active_preset_is_not_matugen() {
+        const face = faceOn("shell-no-preset.json", freshStore())
+        compare(face.themeName, "")
+        compare(face.settingsVisible, false)
+    }
+
+    function test_without_serpantinum_the_theme_stays_unset() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.cataloguePath = filePath("themes")
+        face.shellSettingsPath = filePath("no-such-serpantinum.json")
+        face.matugenColorsPath = filePath("matugen-colors.json")
+        face.themeStorePath = freshStore()
+        face.openSettings()
+        compare(face.themeName, "")
+        compare(face.settingsVisible, false)
     }
 
     function homeDirectory() {

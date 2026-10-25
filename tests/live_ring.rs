@@ -303,6 +303,125 @@ fn until_the_knobs_change_the_ring_uses_memory_h264_full_sides_and_25_mbit() {
 }
 
 #[test]
+fn a_moment_without_a_cursor_or_sound_is_saved_without_them() {
+    let folder = OtkatFolder::new();
+    let screen = Screen::new("Alexey's screen");
+    let mut ring = Ring::enter_session(folder.path.clone(), None);
+    ring.remember_screen(screen.clone());
+    ring.take_monitor(
+        MonitorMoment::new(screen, Duration::from_secs(1))
+            .cursor(false)
+            .picture(0, 180, 0),
+    );
+
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert!(!saved.cursor_in_picture());
+    assert!(!saved.output_sound());
+    assert!(!saved.microphone());
+    let path = folder.path.join(saved.name());
+    drop(event);
+
+    assert_eq!(audio_stream_count(&path), 0);
+    let pixel = pixel_at(&path, 0.0);
+    assert!(
+        pixel.1 > pixel.0 && pixel.1 > pixel.2 && pixel.1 > 100,
+        "the picture is the moment the ring was given, got {pixel:?}"
+    );
+}
+
+#[test]
+fn the_otkat_keeps_the_sound_the_moment_actually_had() {
+    let folder = OtkatFolder::new();
+    let screen = Screen::new("Alexey's screen");
+    let mut ring = Ring::enter_session(folder.path.clone(), None);
+    ring.remember_screen(screen.clone());
+    ring.take_monitor(
+        MonitorMoment::new(screen, Duration::from_secs(1))
+            .cursor(false)
+            .picture(0, 180, 0)
+            .output_sound_hz(330)
+            .microphone_hz(990),
+    );
+
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert!(!saved.cursor_in_picture());
+    assert!(saved.output_sound());
+    assert!(saved.microphone());
+    let path = folder.path.join(saved.name());
+    drop(event);
+
+    let output = tone_level(&path, 0, 330);
+    let stand_in = tone_level(&path, 0, 440);
+    assert!(
+        output > stand_in + 6.0,
+        "output sound is the moment's {output} dB, not a 440 Hz stand-in at {stand_in} dB"
+    );
+    let microphone = tone_level(&path, 1, 990);
+    let other = tone_level(&path, 1, 880);
+    assert!(
+        microphone > other + 6.0,
+        "the microphone is the moment's {microphone} dB, not an 880 Hz stand-in at {other} dB"
+    );
+}
+
+fn pixel_at(path: &Path, at_secs: f64) -> (u8, u8, u8) {
+    let output = Command::new("ffmpeg")
+        .arg("-v")
+        .arg("error")
+        .arg("-ss")
+        .arg(at_secs.to_string())
+        .arg("-i")
+        .arg(path)
+        .arg("-frames:v")
+        .arg("1")
+        .arg("-f")
+        .arg("rawvideo")
+        .arg("-pix_fmt")
+        .arg("rgb24")
+        .arg("-")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "ffmpeg failed to read a frame: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stdout.len() >= 3);
+    (output.stdout[0], output.stdout[1], output.stdout[2])
+}
+
+fn tone_level(path: &Path, stream: usize, hz: u32) -> f64 {
+    let output = Command::new("ffmpeg")
+        .arg("-v")
+        .arg("info")
+        .arg("-i")
+        .arg(path)
+        .arg("-map")
+        .arg(format!("0:a:{stream}"))
+        .arg("-af")
+        .arg(format!(
+            "bandpass=f={hz}:width_type=h:w=30,astats=metadata=1:reset=0"
+        ))
+        .arg("-f")
+        .arg("null")
+        .arg("-")
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&output.stderr);
+    text.lines()
+        .filter_map(|line| line.split("RMS level dB:").nth(1))
+        .last()
+        .and_then(|value| value.trim().parse::<f64>().ok())
+        .unwrap_or(-120.0)
+}
+
+#[test]
 fn a_bind_on_the_live_ring_saves_the_same_name_file_and_plashka() {
     let folder = OtkatFolder::new();
     let screen = Screen::new("Alexey's screen");

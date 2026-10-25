@@ -46,4 +46,24 @@ TestCase {
         compare(face.plashkaMonitor, "laptop")
         compare(face.visible, true)
     }
+
+    function test_the_plashka_window_sits_on_the_ring_monitor() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.monitors = [
+            { name: "origin", x: 400, y: 300, width: 1920, height: 1080, focused: true, connector: "DP-1" },
+            { name: "side", x: 2000, y: 90, width: 1280, height: 800, focused: false, connector: "HDMI-A-1" }
+        ]
+        face.showPlashka(Face.PlashkaEvent.Saved)
+        compare(face.plashkaMonitor, "")
+        compare(face.x, 0)
+        compare(face.y, 0)
+
+        face.setRingMonitor("side")
+        compare(face.x, 2000)
+        compare(face.y, 90)
+        face.setRingMonitor("origin")
+        compare(face.x, 400)
+        compare(face.y, 300)
+    }
 }

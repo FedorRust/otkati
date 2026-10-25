@@ -4,7 +4,9 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use otkati::{BindDay, Bitrate, PlashkaEvent, ResolutionShare, Ring, Screen};
+use otkati::{
+    BindDay, Bitrate, ConnectedMonitor, PlashkaEvent, ResolutionShare, Ring, Screen,
+};
 
 struct OtkatFolder {
     path: PathBuf,
@@ -197,6 +199,30 @@ fn the_bitrate_runs_from_8_to_80_mbit() {
         assert_eq!(saved.height(), 540, "bitrate does not rescale the frame");
         drop(saved);
     }
+}
+
+#[test]
+fn a_known_monitor_keeps_its_frame_under_the_resolution_share() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.remember_screen(Screen::new("desk"));
+    ring.see_connected_monitors(&[ConnectedMonitor::new(
+        Screen::with_frame("desk", 1920, 1080),
+        (1920, 40),
+        false,
+        "HDMI-A-2",
+    )]);
+    ring.take_resolution_share(ResolutionShare::new(50).expect("50 is a resolution share"));
+    ring.hold(Duration::from_secs(1));
+
+    assert_eq!(ring.monitor().map(Screen::name), Some("desk"));
+    let saved = saved_otkat(&mut ring);
+    assert_eq!(saved.width(), 960);
+    assert_eq!(saved.height(), 540);
+    assert_ne!((saved.width(), saved.height()), (16, 16));
+    let path = folder.path.join(saved.name());
+    drop(saved);
+    assert_eq!(mp4_frame(&path), (960, 540));
 }
 
 #[test]

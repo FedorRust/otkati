@@ -4,7 +4,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use otkati::{BindDay, PlashkaEvent, Ring, SessionAutostart};
+use otkati::{BindDay, PlashkaEvent, Ring, Screen, SessionAutostart};
 
 fn ring_program_dir() -> PathBuf {
     let test_exe = std::env::current_exe().expect("test executable");
@@ -119,4 +119,65 @@ fn minutes_the_ring_already_holds_still_save_after_serpantinum_restarts() {
     drop(event);
 
     assert_eq!(mp4_duration_secs(&path), 120);
+}
+
+struct Home {
+    path: PathBuf,
+}
+
+impl Home {
+    fn new() -> Self {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let tick = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("otkati-session-home-{tick}-{n}"));
+        fs::create_dir_all(&path).unwrap();
+        Self { path }
+    }
+}
+
+impl Drop for Home {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+#[test]
+fn the_ring_process_remembers_the_screen_so_the_next_session_does_not_ask() {
+    let home = Home::new();
+    let folder = OtkatFolder::new();
+    let screen = Screen::new("desk");
+    let mut session = SessionAutostart::shipped().log_in_at(
+        folder.path.clone(),
+        home.path.clone(),
+        ring_program_dir(),
+        || BindDay::new(2026, 10, 25),
+    );
+    assert!(
+        session.ring().asks_which_screen(),
+        "a new ring process asks which screen"
+    );
+
+    session.ring().remember_screen(screen.clone());
+    let answer = home.path.join(".local/state/otkati/screen-answer");
+    assert!(
+        answer.is_file(),
+        "the ring process remembers the screen answer on disk"
+    );
+    drop(session);
+
+    let mut next = SessionAutostart::shipped().log_in_at(
+        folder.path.clone(),
+        home.path.clone(),
+        ring_program_dir(),
+        || BindDay::new(2026, 10, 25),
+    );
+    assert!(
+        !next.ring().asks_which_screen(),
+        "the next session does not ask for a screen the ring already remembered"
+    );
+    assert_eq!(next.ring().monitor().map(Screen::name), Some(screen.name()));
 }

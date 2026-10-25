@@ -83,7 +83,7 @@ TestCase {
     function test_couldnt_save_the_clip_follows_the_language() {
         const face = createTemporaryObject(faceComponent, null)
         verify(face)
-        face.showPlashka(Face.PlashkaEvent.ClipNotSaved)
+        face.showPlashka(Face.PlashkaEvent.ClipDidNotSave)
         compare(face.plashkaText, "Couldn't save the clip")
         face.setLanguage("ru")
         compare(face.plashkaText, "Откат не сохранился")
@@ -93,7 +93,7 @@ TestCase {
         const russian = createTemporaryObject(faceComponent, null)
         verify(russian)
         russian.chooseLanguage("ru")
-        russian.showPlashka(Face.PlashkaEvent.ClipNotSaved)
+        russian.showPlashka(Face.PlashkaEvent.ClipDidNotSave)
         compare(russian.plashkaText, "Откат не сохранился")
     }
 }

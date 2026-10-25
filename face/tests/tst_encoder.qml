@@ -11,6 +11,20 @@ TestCase {
         Face {}
     }
 
+    function filePath(name) {
+        let url = Qt.resolvedUrl("fixtures/" + name).toString()
+        if (url.startsWith("file://"))
+            url = decodeURIComponent(url.slice("file://".length))
+        return url
+    }
+
+    function useTheme(face, name) {
+        face.cataloguePath = filePath("themes")
+        face.userCataloguePath = ""
+        face.loadCatalogue()
+        face.setTheme(name)
+    }
+
     function test_the_knob_lists_three_items_and_chooses_h264() {
         const face = createTemporaryObject(faceComponent, null)
         verify(face)
@@ -43,7 +57,7 @@ TestCase {
     function test_an_item_the_card_cannot_do_stays_visible_and_is_not_chosen() {
         const face = createTemporaryObject(faceComponent, null)
         verify(face)
-        face.setTheme("#336699")
+        useTheme(face, "North")
         face.setOfferedEncoders(["H.264", "HEVC"])
 
         compare(face.encoderItems[2], "AV1")
@@ -55,31 +69,31 @@ TestCase {
         compare(face.encoder, "HEVC")
 
         face.showPlashka(Face.PlashkaEvent.Saved)
-        compare(face.plashkaColor, "#336699")
+        compare(face.plashkaColor, "#010101")
         face.chooseEncoder("AV1")
         compare(face.encoder, "HEVC")
         compare(face.plashkaEvent, Face.PlashkaEvent.Saved)
-        compare(face.plashkaColor, "#336699")
+        compare(face.plashkaColor, "#010101")
         compare(face.visible, true)
     }
 
     function test_a_new_machine_stays_on_h264_until_an_offered_item_is_chosen() {
         const face = createTemporaryObject(faceComponent, null)
         verify(face)
-        face.setTheme("#336699")
+        useTheme(face, "North")
         compare(face.encoder, "H.264")
         compare(face.encoderSelectable("AV1"), false)
         face.chooseEncoder("AV1")
         compare(face.encoder, "H.264")
         compare(face.visible, false)
         compare(face.plashkaEvent, -1)
-        compare(face.plashkaColor, "#336699")
+        compare(face.plashkaColor, "#010101")
 
         face.setOfferedEncoders(["H.264", "HEVC", "AV1"])
         compare(face.encoder, "H.264")
         face.chooseEncoder("AV1")
         compare(face.encoder, "AV1")
         compare(face.visible, false)
-        compare(face.plashkaColor, "#336699")
+        compare(face.plashkaColor, "#010101")
     }
 }

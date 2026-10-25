@@ -1,9 +1,10 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use otkati::{BindDay, Card, Encoder, PlashkaEvent, Ring};
+use otkati::{BindDay, Card, Encoder, HardwarePath, PlashkaEvent, Ring};
 
 struct OtkatFolder {
     path: PathBuf,
@@ -234,6 +235,65 @@ fn an_intel_card_that_cannot_do_hevc_offers_only_h264() {
     assert_eq!(ring.encoder(), Encoder::H264);
     ring.take_encoder(Encoder::Av1);
     assert_eq!(ring.encoder(), Encoder::H264);
+}
+
+#[test]
+fn the_file_follows_the_chosen_encoder_and_stays_mp4() {
+    let folder = OtkatFolder::new();
+    let mut nvidia = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    nvidia.see_card(Card::Nvidia3060Ti);
+    assert_eq!(nvidia.hardware_path(), Some(HardwarePath::Nvidia));
+    nvidia.take_encoder(Encoder::Hevc);
+    nvidia.hold(Duration::from_secs(1));
+
+    let event = nvidia.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.encoder(), Encoder::Hevc);
+    assert!(saved.name().ends_with(".mp4"));
+    let hevc = folder.path.join(saved.name());
+    drop(event);
+    assert_eq!(video_codec(&hevc), "hevc");
+
+    let mut amd = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    amd.see_card(Card::Amd {
+        hevc: true,
+        rx_7000: true,
+    });
+    assert_eq!(amd.hardware_path(), Some(HardwarePath::Amd));
+    amd.take_encoder(Encoder::Av1);
+    amd.hold(Duration::from_secs(1));
+    let event = amd.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.encoder(), Encoder::Av1);
+    assert!(saved.name().ends_with(".mp4"));
+    let av1 = folder.path.join(saved.name());
+    drop(event);
+    assert_eq!(video_codec(&av1), "av1");
+}
+
+fn video_codec(path: &Path) -> String {
+    let output = Command::new("ffprobe")
+        .arg("-v")
+        .arg("error")
+        .arg("-select_streams")
+        .arg("v:0")
+        .arg("-show_entries")
+        .arg("stream=codec_name")
+        .arg("-of")
+        .arg("default=nw=1:nk=1")
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "ffprobe failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap().trim().to_string()
 }
 
 #[test]
