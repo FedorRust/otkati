@@ -1,4 +1,6 @@
+use std::ffi::CString;
 use std::fs;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -69,6 +71,8 @@ pub enum PlashkaEvent {
     Saved(SavedOtkat),
     /// The person has not answered which screen the program may see.
     NoAccess,
+    /// The disk has no space, so no finished otkat is written.
+    NoSpace,
 }
 
 impl PartialEq for PlashkaEvent {
@@ -76,6 +80,7 @@ impl PartialEq for PlashkaEvent {
         match (self, other) {
             (Self::NothingToSave, Self::NothingToSave) => true,
             (Self::NoAccess, Self::NoAccess) => true,
+            (Self::NoSpace, Self::NoSpace) => true,
             (Self::Saved(left), Self::Saved(right)) => {
                 left.name == right.name && left.duration == right.duration
             }
@@ -284,9 +289,10 @@ impl Ring {
     /// When it is not the ring's bind, nothing is saved. When the session is
     /// still waiting for the person's screen, answers with
     /// [`PlashkaEvent::NoAccess`]. When the ring holds no frame, answers with
-    /// [`PlashkaEvent::NothingToSave`]. Neither of those creates a file.
-    /// A ring that holds frames answers with [`PlashkaEvent::Saved`]; the file
-    /// is written when that value is dropped.
+    /// [`PlashkaEvent::NothingToSave`]. When the disk has no free space, answers
+    /// with [`PlashkaEvent::NoSpace`]. None of those creates a file.
+    /// A ring that holds frames and has room answers with [`PlashkaEvent::Saved`];
+    /// the file is written when that value is dropped.
     pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
         if chord != self.bind {
             return None;
@@ -296,6 +302,9 @@ impl Ring {
         }
         if self.held.is_zero() {
             return Some(PlashkaEvent::NothingToSave);
+        }
+        if !filesystem_has_room(&self.otkat_folder) {
+            return Some(PlashkaEvent::NoSpace);
         }
         let day = (self.clock)();
         let duration = self.held.min(CHOSEN_LENGTH);
@@ -308,6 +317,54 @@ impl Ring {
             pending: Some(PendingOtkat { path, duration }),
         }))
     }
+}
+
+fn filesystem_has_room(path: &Path) -> bool {
+    let Some(existing) = nearest_existing(path) else {
+        return true;
+    };
+    available_blocks(existing).is_none_or(|blocks| blocks > 0)
+}
+
+fn nearest_existing(mut path: &Path) -> Option<&Path> {
+    loop {
+        if path.exists() {
+            return Some(path);
+        }
+        path = path.parent()?;
+    }
+}
+
+fn available_blocks(path: &Path) -> Option<u64> {
+    let c_path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut stat = unsafe { std::mem::zeroed::<Statvfs>() };
+    let rc = unsafe { statvfs(c_path.as_ptr(), &mut stat) };
+    if rc == 0 {
+        Some(stat.f_bavail)
+    } else {
+        None
+    }
+}
+
+#[repr(C)]
+struct Statvfs {
+    f_bsize: u64,
+    f_frsize: u64,
+    f_blocks: u64,
+    f_bfree: u64,
+    f_bavail: u64,
+    f_files: u64,
+    f_ffree: u64,
+    f_favail: u64,
+    f_fsid: u64,
+    f_flag: u64,
+    f_namemax: u64,
+    f_type: u32,
+    spare: [i32; 5],
+}
+
+extern "C" {
+    fn statvfs(path: *const std::os::raw::c_char, buf: *mut Statvfs) -> i32;
 }
 
 fn next_otkat_number(folder: &Path) -> u32 {
