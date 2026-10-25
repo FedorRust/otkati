@@ -75,3 +75,19 @@ fn the_answered_screen_is_remembered_for_the_next_session() {
     assert!(!next.asks_which_screen());
     assert_eq!(next.monitor(), Some(&screen));
 }
+
+#[test]
+fn a_remembered_screen_with_no_frame_still_reports_nothing_to_save() {
+    let folder = OtkatFolder::new();
+    let screen = Screen::new("Alexey's screen");
+    let mut ring = Ring::enter_session(folder.path.clone(), Some(screen));
+
+    let event = ring.bind();
+
+    assert_eq!(event, PlashkaEvent::NothingToSave);
+    let written: Vec<_> = fs::read_dir(&folder.path).unwrap().collect();
+    assert!(
+        written.is_empty(),
+        "a remembered screen with no frame must not put a file in the otkat folder"
+    );
+}
