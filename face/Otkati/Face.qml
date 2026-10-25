@@ -24,6 +24,7 @@ Window {
     property string language: "en"
     property string cataloguePath: ""
     property string shellSettingsPath: ""
+    property string matugenColorsPath: ""
     property string themeStorePath: ""
     property string themeName: ""
     property var themeColors: ({})
@@ -52,6 +53,20 @@ Window {
         return colors
     }
 
+    function readJson(path) {
+        try {
+            return JSON.parse(Files.readText(path))
+        } catch (e) {
+            return null
+        }
+    }
+
+    function colorsFrom(parsed) {
+        if (!parsed)
+            return null
+        return colorSet(parsed.colors || parsed)
+    }
+
     function applyTheme(name, colors) {
         if (!settingsSurface)
             settingsSurface = settingsWindowComponent.createObject(null)
@@ -69,9 +84,7 @@ Window {
             return
         }
         const theme = settings.theme || {}
-        if (theme.matugen === true)
-            return
-        const colors = colorSet(theme.colors)
+        const colors = theme.matugen === true ? colorsFrom(readJson(matugenColorsPath)) : colorSet(theme.colors)
         if (!colors)
             return
         applyTheme(theme.activePreset || "", colors)
