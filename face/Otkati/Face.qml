@@ -15,10 +15,17 @@ Window {
         NoAccess
     }
 
+    enum RingPlace {
+        Memory,
+        Disk
+    }
+
     property color themeColor: "#000000"
     property string language: "en"
     // The bind the face hands to the ring. Alt+Z until the person changes it.
     property string bind: "Alt+Z"
+    // The ring place the face hands to the ring. Memory until the person chooses disk.
+    property int ringPlace: Face.RingPlace.Memory
     // Reported by the shell. The program language does not follow either value.
     property string shellLanguage: ""
     property string serpantinumLanguage: ""
@@ -47,6 +54,10 @@ Window {
 
     function setBind(chord) {
         bind = chord
+    }
+
+    function setRingPlace(place) {
+        ringPlace = place
     }
 
     function setShellLanguage(next) {
