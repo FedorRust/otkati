@@ -50,10 +50,7 @@ fn a_3060_ti_offers_h264_and_hevc_and_still_chooses_h264() {
     ring.see_card(Card::Nvidia3060Ti);
 
     assert_eq!(ring.encoder(), Encoder::H264);
-    assert_eq!(
-        ring.offered_encoders(),
-        vec![Encoder::H264, Encoder::Hevc]
-    );
+    assert_eq!(ring.offered_encoders(), vec![Encoder::H264, Encoder::Hevc]);
 }
 
 #[test]
@@ -100,10 +97,7 @@ fn a_3070_ti_offers_h264_and_hevc_and_refuses_av1() {
     ring.see_card(Card::Nvidia3070Ti);
 
     assert_eq!(ring.encoder(), Encoder::H264);
-    assert_eq!(
-        ring.offered_encoders(),
-        vec![Encoder::H264, Encoder::Hevc]
-    );
+    assert_eq!(ring.offered_encoders(), vec![Encoder::H264, Encoder::Hevc]);
 
     ring.take_encoder(Encoder::Av1);
 
@@ -143,10 +137,7 @@ fn an_amd_card_that_can_do_hevc_offers_it_and_not_av1() {
     });
 
     assert_eq!(ring.encoder(), Encoder::H264);
-    assert_eq!(
-        ring.offered_encoders(),
-        vec![Encoder::H264, Encoder::Hevc]
-    );
+    assert_eq!(ring.offered_encoders(), vec![Encoder::H264, Encoder::Hevc]);
 
     ring.take_encoder(Encoder::Av1);
     assert_eq!(ring.encoder(), Encoder::H264);
@@ -222,13 +213,40 @@ fn an_intel_card_that_can_do_hevc_offers_it_and_not_av1() {
     ring.see_card(Card::Intel { hevc: true });
 
     assert_eq!(ring.encoder(), Encoder::H264);
-    assert_eq!(
-        ring.offered_encoders(),
-        vec![Encoder::H264, Encoder::Hevc]
-    );
+    assert_eq!(ring.offered_encoders(), vec![Encoder::H264, Encoder::Hevc]);
 
     ring.take_encoder(Encoder::Av1);
     assert_eq!(ring.encoder(), Encoder::H264);
     ring.take_encoder(Encoder::Hevc);
     assert_eq!(ring.encoder(), Encoder::Hevc);
+}
+
+#[test]
+fn an_intel_card_that_cannot_do_hevc_offers_only_h264() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::new(folder.path.clone());
+    ring.see_card(Card::Intel { hevc: false });
+
+    assert_eq!(ring.encoder(), Encoder::H264);
+    assert_eq!(ring.offered_encoders(), vec![Encoder::H264]);
+
+    ring.take_encoder(Encoder::Hevc);
+    assert_eq!(ring.encoder(), Encoder::H264);
+    ring.take_encoder(Encoder::Av1);
+    assert_eq!(ring.encoder(), Encoder::H264);
+}
+
+#[test]
+fn a_machine_with_no_hardware_encoder_offers_only_h264() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::new(folder.path.clone());
+    ring.see_card(Card::NoHardwareEncoder);
+
+    assert_eq!(ring.encoder(), Encoder::H264);
+    assert_eq!(ring.offered_encoders(), vec![Encoder::H264]);
+
+    ring.take_encoder(Encoder::Hevc);
+    assert_eq!(ring.encoder(), Encoder::H264);
+    ring.take_encoder(Encoder::Av1);
+    assert_eq!(ring.encoder(), Encoder::H264);
 }

@@ -35,6 +35,8 @@ pub enum Card {
     Amd { hevc: bool, rx_7000: bool },
     /// An Intel card. `hevc` is whether this card can do HEVC.
     Intel { hevc: bool },
+    /// This machine has no hardware encoder. H.264 stays available.
+    NoHardwareEncoder,
 }
 
 /// The key combination that asks the ring to save an otkat.
@@ -398,7 +400,7 @@ fn vendor_path(card: Card) -> Option<VendorPath> {
     match card {
         Card::Nvidia3060Ti | Card::Nvidia3070Ti | Card::Nvidia40Series => Some(VendorPath::Nvidia),
         Card::Amd { .. } => Some(VendorPath::Amd),
-        Card::Intel { .. } => None,
+        Card::Intel { .. } | Card::NoHardwareEncoder => None,
     }
 }
 
