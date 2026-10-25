@@ -57,6 +57,42 @@ impl Screen {
     }
 }
 
+/// A moment of one monitor handed to the ring.
+///
+/// This is the capture boundary's report of that monitor. It is not a
+/// Wayland buffer, and the ring does not keep it as raw frames.
+#[derive(Debug, Clone)]
+pub struct MonitorMoment {
+    screen: Screen,
+    elapsed: Duration,
+}
+
+impl MonitorMoment {
+    /// `elapsed` is how long this moment of `screen` lasted.
+    pub fn new(screen: Screen, elapsed: Duration) -> Self {
+        Self { screen, elapsed }
+    }
+}
+
+/// The encoded segment the ring is holding for its monitor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EncodedSegment {
+    monitor: Screen,
+    duration: Duration,
+}
+
+impl EncodedSegment {
+    /// The monitor kept in this segment.
+    pub fn monitor(&self) -> &Screen {
+        &self.monitor
+    }
+
+    /// How much of that monitor the ring has kept.
+    pub fn duration(&self) -> Duration {
+        self.duration
+    }
+}
+
 /// What the ring tells the face to show.
 ///
 /// A [`PlashkaEvent::Saved`] value is the success plashka. The file is written
@@ -177,6 +213,7 @@ pub struct Ring {
     clock: Box<dyn Fn() -> BindDay + Send>,
     waiting_for_screen: bool,
     screen: Option<Screen>,
+    segment: Option<EncodedSegment>,
     bind: Bind,
 }
 
@@ -212,6 +249,7 @@ impl Ring {
             clock: Box::new(clock),
             waiting_for_screen: false,
             screen: None,
+            segment: None,
             bind: Self::default_bind(),
         }
     }
@@ -231,6 +269,7 @@ impl Ring {
             clock: Box::new(system_bind_day),
             waiting_for_screen,
             screen: remembered,
+            segment: None,
             bind: Self::default_bind(),
         }
     }
@@ -258,6 +297,39 @@ impl Ring {
         self.screen.as_ref()
     }
 
+    /// A moment of a monitor arrived.
+    ///
+    /// After the person has answered, a moment of the ring's monitor enters
+    /// the ring as an encoded segment. Another monitor stays out. Before the
+    /// answer, nothing enters, and nothing is written to the otkat folder.
+    pub fn take_monitor(&mut self, moment: MonitorMoment) {
+        if self.waiting_for_screen {
+            return;
+        }
+        let Some(monitor) = self.screen.clone() else {
+            return;
+        };
+        if monitor != moment.screen {
+            return;
+        }
+        let adding = moment.elapsed;
+        if let Some(segment) = self.segment.as_mut() {
+            segment.duration += adding;
+            self.held = segment.duration;
+            return;
+        }
+        self.segment = Some(EncodedSegment {
+            monitor,
+            duration: adding,
+        });
+        self.held = adding;
+    }
+
+    /// The encoded segment the ring is holding, once its monitor has entered.
+    pub fn segment(&self) -> Option<&EncodedSegment> {
+        self.segment.as_ref()
+    }
+
     /// Output sound arrived. It does not ask which screen to give.
     pub fn output_sound(&mut self) {}
 
@@ -266,7 +338,8 @@ impl Ring {
 
     /// The ring holds `held` of encoded time.
     ///
-    /// Live capture from the monitor fills this in a later ticket.
+    /// [`Ring::take_monitor`] fills this from the ring's monitor. A ring that
+    /// already holds time can still be set directly.
     pub fn hold(&mut self, held: Duration) {
         self.held = held;
     }
