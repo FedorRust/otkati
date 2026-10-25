@@ -28,6 +28,8 @@ pub enum Card {
     Nvidia3060Ti,
     /// NVIDIA GeForce RTX 3070 Ti.
     Nvidia3070Ti,
+    /// NVIDIA from the 40 series on.
+    Nvidia40Series,
 }
 
 /// The key combination that asks the ring to save an otkat.
@@ -317,9 +319,12 @@ impl Ring {
         let mut offered = vec![Encoder::H264];
         if matches!(
             self.card,
-            Some(Card::Nvidia3060Ti | Card::Nvidia3070Ti)
+            Some(Card::Nvidia3060Ti | Card::Nvidia3070Ti | Card::Nvidia40Series)
         ) {
             offered.push(Encoder::Hevc);
+        }
+        if matches!(self.card, Some(Card::Nvidia40Series)) {
+            offered.push(Encoder::Av1);
         }
         offered
     }
