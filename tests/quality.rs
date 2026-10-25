@@ -4,7 +4,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use otkati::{BindDay, PlashkaEvent, ResolutionShare, Ring, Screen};
+use otkati::{BindDay, Bitrate, PlashkaEvent, ResolutionShare, Ring, Screen};
 
 struct OtkatFolder {
     path: PathBuf,
@@ -125,4 +125,25 @@ fn width_and_height_come_out_even() {
     let scaled_path = folder.path.join(scaled.name());
     drop(scaled);
     assert_eq!(mp4_frame(&scaled_path), (1228, 690));
+}
+
+#[test]
+fn changing_the_share_leaves_the_bitrate() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.remember_screen(Screen::with_frame("desk", 1920, 1080));
+    ring.hold(Duration::from_secs(1));
+    ring.take_bitrate(Bitrate::new(40));
+
+    ring.take_resolution_share(ResolutionShare::new(50));
+    let half = saved_otkat(&mut ring);
+    assert_eq!(half.width(), 960);
+    assert_eq!(half.height(), 540);
+    assert_eq!(half.bitrate_mbit(), 40);
+
+    ring.take_resolution_share(ResolutionShare::new(100));
+    let full = saved_otkat(&mut ring);
+    assert_eq!(full.width(), 1920);
+    assert_eq!(full.height(), 1080);
+    assert_eq!(full.bitrate_mbit(), 40);
 }

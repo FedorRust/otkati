@@ -65,6 +65,32 @@ impl Default for ResolutionShare {
     }
 }
 
+/// Picture bitrate in Mbit/s.
+///
+/// The face hands this to the ring. It does not follow the resolution share.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bitrate {
+    mbit_per_sec: u8,
+}
+
+impl Bitrate {
+    /// `mbit_per_sec` is the picture bitrate. The ring starts at 25.
+    pub fn new(mbit_per_sec: u8) -> Self {
+        Self { mbit_per_sec }
+    }
+
+    /// The picture bitrate in Mbit/s.
+    pub fn mbit_per_sec(self) -> u8 {
+        self.mbit_per_sec
+    }
+}
+
+impl Default for Bitrate {
+    fn default() -> Self {
+        Self { mbit_per_sec: 25 }
+    }
+}
+
 /// A screen the person can give the program.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Screen {
@@ -236,9 +262,6 @@ impl PendingOtkat {
 /// The length the ring aims to hold until the length knob exists: 10 minutes.
 const CHOSEN_LENGTH: Duration = Duration::from_secs(10 * 60);
 
-/// Picture bitrate until the bitrate knob moves it: 25 Mbit/s.
-const PICTURE_BITRATE_MBIT: u8 = 25;
-
 /// Stand-in frame when the ring monitor's size is not known yet.
 const STAND_IN_FRAME: (u32, u32) = (16, 16);
 
@@ -260,6 +283,7 @@ pub struct Ring {
     screen: Option<Screen>,
     bind: Bind,
     resolution_share: ResolutionShare,
+    bitrate: Bitrate,
 }
 
 impl Ring {
@@ -296,6 +320,7 @@ impl Ring {
             screen: None,
             bind: Self::default_bind(),
             resolution_share: ResolutionShare::default(),
+            bitrate: Bitrate::default(),
         }
     }
 
@@ -316,6 +341,7 @@ impl Ring {
             screen: remembered,
             bind: Self::default_bind(),
             resolution_share: ResolutionShare::default(),
+            bitrate: Bitrate::default(),
         }
     }
 
@@ -370,6 +396,13 @@ impl Ring {
         self.resolution_share = share;
     }
 
+    /// The face hands the ring a new picture bitrate.
+    ///
+    /// Changing the resolution share does not change this.
+    pub fn take_bitrate(&mut self, bitrate: Bitrate) {
+        self.bitrate = bitrate;
+    }
+
     /// `chord` reached the ring.
     ///
     /// When it is not the ring's bind, nothing is saved. When the session is
@@ -405,7 +438,7 @@ impl Ring {
                 )
             })
             .unwrap_or(STAND_IN_FRAME);
-        let bitrate_mbit = PICTURE_BITRATE_MBIT;
+        let bitrate_mbit = self.bitrate.mbit_per_sec();
         Some(PlashkaEvent::Saved(SavedOtkat {
             name,
             duration,
