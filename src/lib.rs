@@ -764,8 +764,7 @@ impl Ring {
         if self.ring_place == place {
             return;
         }
-        self.held = Duration::ZERO;
-        self.segment = None;
+        self.forget_held();
         self.ring_place = place;
         if place == RingPlace::Disk {
             if let Err(err) = fs::create_dir_all(&self.ring_folder) {
@@ -1087,6 +1086,7 @@ impl Ring {
             return;
         }
         self.held = held;
+        self.store_encoded_ring();
     }
 
     /// A plashka that arrived after [`Ring::bind`] has already answered.
@@ -1124,8 +1124,7 @@ impl Ring {
         let turning_on = self.switch == Switch::Off && switch == Switch::On;
         self.switch = switch;
         if self.switch == Switch::Off || turning_on {
-            self.held = Duration::ZERO;
-            self.segment = None;
+            self.forget_held();
         }
     }
 
@@ -1303,6 +1302,42 @@ impl Ring {
                 }))
             }
             _ => None,
+        }
+    }
+
+    fn forget_held(&mut self) {
+        self.held = Duration::ZERO;
+        self.segment = None;
+        let _ = fs::remove_file(self.ring_folder.join("segment.mp4"));
+    }
+
+    /// On disk, the encoded ring is a file in the ring folder. In memory, it is not.
+    fn store_encoded_ring(&self) {
+        if self.ring_place != RingPlace::Disk {
+            return;
+        }
+        let path = self.ring_folder.join("segment.mp4");
+        if self.held.is_zero() {
+            let _ = fs::remove_file(&path);
+            return;
+        }
+        let (width, height) = self
+            .screen
+            .as_ref()
+            .and_then(Screen::frame)
+            .unwrap_or(STAND_IN_FRAME);
+        if let Err(err) = encode_mp4(
+            &path,
+            self.held,
+            width,
+            height,
+            self.bitrate.mbit_per_sec(),
+            false,
+            false,
+            false,
+            PICTURE_RATE,
+        ) {
+            eprintln!("encoded ring was not stored: {err}");
         }
     }
 

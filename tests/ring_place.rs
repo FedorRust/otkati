@@ -1,5 +1,6 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -157,6 +158,51 @@ fn handing_the_current_place_keeps_minutes_already_held() {
         panic!("expected the minutes kept on disk, got {event:?}");
     };
     assert_eq!(saved.duration(), Duration::from_secs(90));
+}
+
+#[test]
+fn choosing_disk_keeps_the_encoded_ring_in_the_ring_folder() {
+    let home = Home::new();
+    let otkats = home.path.join("Videos").join("Откаты");
+    let mut ring = Ring::with_home(&otkats, &home.path);
+    ring.take_place(RingPlace::Disk);
+
+    ring.hold(Duration::from_secs(30));
+
+    let segment = home
+        .path
+        .join(".local/state/otkati/ring")
+        .join("segment.mp4");
+    assert!(
+        segment.is_file(),
+        "choosing disk puts the encoded ring in the ring folder"
+    );
+    assert_eq!(mp4_duration_secs(&segment), 30);
+    assert!(
+        !otkats.exists(),
+        "the encoded ring is not an otkat"
+    );
+}
+
+fn mp4_duration_secs(path: &Path) -> u64 {
+    let output = Command::new("ffprobe")
+        .arg("-v")
+        .arg("error")
+        .arg("-show_entries")
+        .arg("format=duration")
+        .arg("-of")
+        .arg("default=nw=1:nk=1")
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "ffprobe failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8(output.stdout).unwrap();
+    let secs: f64 = text.trim().parse().unwrap();
+    secs.round() as u64
 }
 
 #[test]
