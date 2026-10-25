@@ -43,17 +43,35 @@ impl BindDay {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Screen {
     name: String,
+    frame: Option<(u32, u32)>,
 }
 
 impl Screen {
     /// The screen the person chose.
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into() }
+        Self {
+            name: name.into(),
+            frame: None,
+        }
+    }
+
+    /// The screen, together with its frame in pixels.
+    ///
+    /// The frame is the ring monitor before the resolution share.
+    pub fn with_frame(name: impl Into<String>, width: u32, height: u32) -> Self {
+        Self {
+            name: name.into(),
+            frame: Some((width, height)),
+        }
     }
 
     /// How this screen is told apart from another.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    fn frame(&self) -> Option<(u32, u32)> {
+        self.frame
     }
 }
 
@@ -94,6 +112,9 @@ impl Eq for PlashkaEvent {}
 pub struct SavedOtkat {
     name: String,
     duration: Duration,
+    width: u32,
+    height: u32,
+    bitrate_mbit: u8,
     pending: Option<PendingOtkat>,
 }
 
@@ -106,6 +127,21 @@ impl SavedOtkat {
     /// How long the file is. Empty seconds are not included.
     pub fn duration(&self) -> Duration {
         self.duration
+    }
+
+    /// Encoded frame width, in pixels.
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    /// Encoded frame height, in pixels.
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    /// Picture bitrate in Mbit/s. It does not follow the resolution share.
+    pub fn bitrate_mbit(&self) -> u8 {
+        self.bitrate_mbit
     }
 }
 
@@ -123,6 +159,9 @@ impl Drop for SavedOtkat {
 struct PendingOtkat {
     path: PathBuf,
     duration: Duration,
+    width: u32,
+    height: u32,
+    bitrate_mbit: u8,
 }
 
 impl PendingOtkat {
@@ -138,13 +177,18 @@ impl PendingOtkat {
             .arg("-f")
             .arg("lavfi")
             .arg("-i")
-            .arg(format!("color=c=black:s=16x16:r=1:d={seconds}"))
+            .arg(format!(
+                "color=c=black:s={}x{}:r=1:d={seconds}",
+                self.width, self.height
+            ))
             .arg("-c:v")
             .arg("libx264")
             .arg("-preset")
             .arg("ultrafast")
             .arg("-pix_fmt")
             .arg("yuv420p")
+            .arg("-b:v")
+            .arg(format!("{}M", self.bitrate_mbit))
             .arg("-an")
             .arg(&self.path)
             .stdin(Stdio::null())
@@ -165,6 +209,12 @@ impl PendingOtkat {
 
 /// The length the ring aims to hold until the length knob exists: 10 minutes.
 const CHOSEN_LENGTH: Duration = Duration::from_secs(10 * 60);
+
+/// Picture bitrate until the bitrate knob moves it: 25 Mbit/s.
+const PICTURE_BITRATE_MBIT: u8 = 25;
+
+/// Stand-in frame when the ring monitor's size is not known yet.
+const STAND_IN_FRAME: (u32, u32) = (16, 16);
 
 /// Encoded seconds the ring holds, and the bind that asks to save an otkat.
 ///
@@ -302,10 +352,25 @@ impl Ring {
         let number = next_otkat_number(&self.otkat_folder);
         let name = format!("otkat{number}-{}.mp4", day.label());
         let path = self.otkat_folder.join(&name);
+        let (width, height) = self
+            .screen
+            .as_ref()
+            .and_then(Screen::frame)
+            .unwrap_or(STAND_IN_FRAME);
+        let bitrate_mbit = PICTURE_BITRATE_MBIT;
         Some(PlashkaEvent::Saved(SavedOtkat {
             name,
             duration,
-            pending: Some(PendingOtkat { path, duration }),
+            width,
+            height,
+            bitrate_mbit,
+            pending: Some(PendingOtkat {
+                path,
+                duration,
+                width,
+                height,
+                bitrate_mbit,
+            }),
         }))
     }
 }
