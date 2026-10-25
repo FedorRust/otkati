@@ -9,11 +9,14 @@ Window {
     flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
 
     enum PlashkaEvent {
-        NothingToSave
+        NothingToSave,
+        Saved
     }
 
     property color themeColor: "#000000"
     property string language: "en"
+    property bool redAlarm: false
+    property int shownEvent: -1
     readonly property alias plashkaText: label.text
     readonly property alias plashkaColor: background.color
 
@@ -23,7 +26,7 @@ Window {
 
     function setLanguage(next) {
         language = next
-        if (visible)
+        if (visible && shownEvent === Face.PlashkaEvent.NothingToSave)
             label.text = nothingToSaveText()
     }
 
@@ -34,9 +37,17 @@ Window {
     }
 
     function showPlashka(event) {
-        if (event !== Face.PlashkaEvent.NothingToSave)
+        if (event === Face.PlashkaEvent.NothingToSave) {
+            shownEvent = event
+            redAlarm = true
+            label.text = nothingToSaveText()
+        } else if (event === Face.PlashkaEvent.Saved) {
+            shownEvent = event
+            redAlarm = false
+            label.text = ""
+        } else {
             return
-        label.text = nothingToSaveText()
+        }
         visible = true
         hideTimer.restart()
     }
@@ -50,7 +61,7 @@ Window {
     Rectangle {
         id: background
         anchors.fill: parent
-        color: "#ff0000"
+        color: root.redAlarm ? "#ff0000" : root.themeColor
     }
 
     Text {
