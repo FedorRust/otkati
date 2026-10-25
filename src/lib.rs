@@ -48,6 +48,70 @@ impl BindDay {
     }
 }
 
+/// Percent of each side of the ring monitor's frame.
+///
+/// The face hands this to the ring. One hundred keeps the whole monitor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResolutionShare {
+    percent: u8,
+}
+
+impl ResolutionShare {
+    /// `percent` of each side, from 50 to 100 in steps of 10.
+    ///
+    /// Any other percent is not a resolution share.
+    pub fn new(percent: u8) -> Option<Self> {
+        if (50..=100).contains(&percent) && percent % 10 == 0 {
+            Some(Self { percent })
+        } else {
+            None
+        }
+    }
+
+    /// The percent of each side.
+    pub fn percent(self) -> u8 {
+        self.percent
+    }
+}
+
+impl Default for ResolutionShare {
+    fn default() -> Self {
+        Self::new(100).expect("100 is a resolution share")
+    }
+}
+
+/// Picture bitrate in Mbit/s.
+///
+/// The face hands this to the ring. It does not follow the resolution share.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bitrate {
+    mbit_per_sec: u8,
+}
+
+impl Bitrate {
+    /// `mbit_per_sec` is the picture bitrate, from 8 to 80.
+    ///
+    /// Any other number is not a picture bitrate.
+    pub fn new(mbit_per_sec: u8) -> Option<Self> {
+        if (8..=80).contains(&mbit_per_sec) {
+            Some(Self { mbit_per_sec })
+        } else {
+            None
+        }
+    }
+
+    /// The picture bitrate in Mbit/s.
+    pub fn mbit_per_sec(self) -> u8 {
+        self.mbit_per_sec
+    }
+}
+
+impl Default for Bitrate {
+    fn default() -> Self {
+        Self::new(25).expect("25 is a picture bitrate")
+    }
+}
+
 /// The switch the face hands the ring.
 ///
 /// Off stops the ring. The process keeps running.
@@ -61,17 +125,35 @@ pub enum Switch {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Screen {
     name: String,
+    frame: Option<(u32, u32)>,
 }
 
 impl Screen {
     /// The screen the person chose.
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into() }
+        Self {
+            name: name.into(),
+            frame: None,
+        }
+    }
+
+    /// The screen, together with its frame in pixels.
+    ///
+    /// The frame is the ring monitor before the resolution share.
+    pub fn with_frame(name: impl Into<String>, width: u32, height: u32) -> Self {
+        Self {
+            name: name.into(),
+            frame: Some((width, height)),
+        }
     }
 
     /// How this screen is told apart from another.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    fn frame(&self) -> Option<(u32, u32)> {
+        self.frame
     }
 }
 
@@ -118,6 +200,9 @@ impl Eq for PlashkaEvent {}
 pub struct SavedOtkat {
     name: String,
     duration: Duration,
+    width: u32,
+    height: u32,
+    bitrate_mbit: u8,
     pending: Option<PendingOtkat>,
 }
 
@@ -130,6 +215,21 @@ impl SavedOtkat {
     /// How long the file is. Empty seconds are not included.
     pub fn duration(&self) -> Duration {
         self.duration
+    }
+
+    /// Encoded frame width, in pixels. Always even.
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    /// Encoded frame height, in pixels. Always even.
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    /// Picture bitrate in Mbit/s. It does not follow the resolution share.
+    pub fn bitrate_mbit(&self) -> u8 {
+        self.bitrate_mbit
     }
 }
 
@@ -147,6 +247,9 @@ impl Drop for SavedOtkat {
 struct PendingOtkat {
     path: PathBuf,
     duration: Duration,
+    width: u32,
+    height: u32,
+    bitrate_mbit: u8,
 }
 
 impl PendingOtkat {
@@ -162,13 +265,18 @@ impl PendingOtkat {
             .arg("-f")
             .arg("lavfi")
             .arg("-i")
-            .arg(format!("color=c=black:s=16x16:r=1:d={seconds}"))
+            .arg(format!(
+                "color=c=black:s={}x{}:r=1:d={seconds}",
+                self.width, self.height
+            ))
             .arg("-c:v")
             .arg("libx264")
             .arg("-preset")
             .arg("ultrafast")
             .arg("-pix_fmt")
             .arg("yuv420p")
+            .arg("-b:v")
+            .arg(format!("{}M", self.bitrate_mbit))
             .arg("-an")
             .arg(&self.path)
             .stdin(Stdio::null())
@@ -190,6 +298,14 @@ impl PendingOtkat {
 /// Ten minutes, until the face hands a different length.
 const DEFAULT_LENGTH: Duration = Duration::from_secs(10 * 60);
 
+/// Stand-in frame when the ring monitor's size is not known yet.
+const STAND_IN_FRAME: (u32, u32) = (16, 16);
+
+/// The encoder takes an even width and an even height.
+fn even_pixels(pixels: u32) -> u32 {
+    pixels - (pixels % 2)
+}
+
 /// Encoded seconds the ring holds, and the bind that asks to save an otkat.
 ///
 /// A newly created ring holds no frame and listens for [`Ring::default_bind`]
@@ -205,6 +321,8 @@ pub struct Ring {
     bind: Bind,
     ring_place: RingPlace,
     ring_folder: PathBuf,
+    resolution_share: ResolutionShare,
+    bitrate: Bitrate,
     switch: Switch,
 }
 
@@ -289,6 +407,8 @@ impl Ring {
             bind: Self::default_bind(),
             ring_place: RingPlace::Memory,
             ring_folder: ring_folder_under(&home_dir()),
+            resolution_share: ResolutionShare::default(),
+            bitrate: Bitrate::default(),
             switch: Switch::On,
         }
     }
@@ -312,6 +432,8 @@ impl Ring {
             bind: Self::default_bind(),
             ring_place: RingPlace::Memory,
             ring_folder: ring_folder_under(&home_dir()),
+            resolution_share: ResolutionShare::default(),
+            bitrate: Bitrate::default(),
             switch: Switch::On,
         }
     }
@@ -401,6 +523,20 @@ impl Ring {
         self.otkat_folder = folder.into();
     }
 
+    /// The face hands the ring a new resolution share.
+    ///
+    /// Each side of the next otkat is this percent of the ring monitor.
+    pub fn take_resolution_share(&mut self, share: ResolutionShare) {
+        self.resolution_share = share;
+    }
+
+    /// The face hands the ring a new picture bitrate.
+    ///
+    /// Changing the resolution share does not change this.
+    pub fn take_bitrate(&mut self, bitrate: Bitrate) {
+        self.bitrate = bitrate;
+    }
+
     /// `chord` reached the ring.
     ///
     /// When it is not the ring's bind, nothing is saved. When the ring is off,
@@ -433,10 +569,32 @@ impl Ring {
         let number = next_otkat_number(&self.otkat_folder);
         let name = format!("otkat{number}-{}.mp4", day.label());
         let path = self.otkat_folder.join(&name);
+        let (width, height) = self
+            .screen
+            .as_ref()
+            .and_then(Screen::frame)
+            .map(|(width, height)| {
+                let percent = u32::from(self.resolution_share.percent());
+                (
+                    even_pixels(width * percent / 100),
+                    even_pixels(height * percent / 100),
+                )
+            })
+            .unwrap_or(STAND_IN_FRAME);
+        let bitrate_mbit = self.bitrate.mbit_per_sec();
         Some(PlashkaEvent::Saved(SavedOtkat {
             name,
             duration,
-            pending: Some(PendingOtkat { path, duration }),
+            width,
+            height,
+            bitrate_mbit,
+            pending: Some(PendingOtkat {
+                path,
+                duration,
+                width,
+                height,
+                bitrate_mbit,
+            }),
         }))
     }
 }

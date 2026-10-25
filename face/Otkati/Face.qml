@@ -59,6 +59,11 @@ Window {
     property string otkatFolder: homePath + "/Videos/Откаты"
     // The bind the face hands to the ring. Alt+Z until the person changes it.
     property string bind: "Alt+Z"
+    // Percent of each side of the ring monitor. 100 until the person changes it.
+    property int resolutionShare: 100
+    // Picture bitrate in Mbit/s. 25 until the person changes it.
+    // It does not follow the resolution share. There is no audio-quality knob.
+    property int bitrate: 25
     // The length, in seconds, the face hands to the ring. Ten minutes until the person changes it.
     property int length: 600
     // The ring place the face hands to the ring. Memory until the person chooses disk.
@@ -238,6 +243,18 @@ Window {
 
     function setBind(chord) {
         bind = chord
+    }
+
+    function setResolutionShare(percent) {
+        if (percent < 50 || percent > 100 || percent % 10 !== 0)
+            return
+        resolutionShare = percent
+    }
+
+    function setBitrate(mbit) {
+        if (mbit < 8 || mbit > 80 || mbit % 1 !== 0)
+            return
+        bitrate = mbit
     }
 
     function setLength(seconds) {
