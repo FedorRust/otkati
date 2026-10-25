@@ -43,3 +43,8 @@ fn bind_on_an_empty_ring_yields_a_plashka_and_writes_no_otkat() {
         "an empty ring must not put a file in the otkat folder"
     );
 }
+
+#[test]
+fn the_default_bind_is_alt_z() {
+    assert_eq!(Ring::default_bind().text(), "Alt+Z");
+}

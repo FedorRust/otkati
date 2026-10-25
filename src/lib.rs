@@ -1,5 +1,18 @@
 use std::path::PathBuf;
 
+/// The key combination that asks the ring to save an otkat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bind {
+    text: &'static str,
+}
+
+impl Bind {
+    /// How the bind is written, for example `Alt+Z`.
+    pub fn text(self) -> &'static str {
+        self.text
+    }
+}
+
 /// What the ring tells the face to show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlashkaEvent {
@@ -15,6 +28,11 @@ pub struct Ring {
 }
 
 impl Ring {
+    /// The bind a new ring listens for, before anyone changes it.
+    pub fn default_bind() -> Bind {
+        Bind { text: "Alt+Z" }
+    }
+
     /// `otkat_folder` is where a saved otkat would be written.
     pub fn new(otkat_folder: impl Into<PathBuf>) -> Self {
         Self {
