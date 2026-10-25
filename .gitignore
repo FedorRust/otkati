@@ -3,3 +3,4 @@
 build/
 *.qmlc
 *.qsb
+face/Otkati/Files/*.so
