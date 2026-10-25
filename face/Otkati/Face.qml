@@ -81,6 +81,11 @@ Window {
     ]
     readonly property string firstLaunchButton: firstLaunchOverlay ? firstLaunchOverlay.buttonText : ""
     readonly property var typedLines: firstLaunchOverlay ? firstLaunchOverlay.typedLines : []
+    readonly property color penguinOutlineColor: firstLaunchOverlay ? firstLaunchOverlay.outlineColor : "transparent"
+    readonly property color penguinFillColor: firstLaunchOverlay ? firstLaunchOverlay.fillColor : "transparent"
+    readonly property color screenWipeColor: firstLaunchOverlay ? firstLaunchOverlay.wipeColor : "transparent"
+    readonly property color firstLaunchTextColor: firstLaunchOverlay ? firstLaunchOverlay.lineColor : "transparent"
+    readonly property color firstLaunchButtonColor: firstLaunchOverlay ? firstLaunchOverlay.lineColor : "transparent"
     readonly property real penguinFillLevel: firstLaunchOverlay ? firstLaunchOverlay.fillLevel : 0
     readonly property real penguinFillTop: firstLaunchOverlay ? firstLaunchOverlay.penguinFillTop : 0
     readonly property real penguinFillHeight: firstLaunchOverlay ? firstLaunchOverlay.penguinFillHeight : 0
@@ -256,6 +261,8 @@ Window {
             fillColor: Qt.binding(function() { return root.themeColors.blue }),
             buttonText: Qt.binding(function() { return root.language === "ru" ? "Дальше" : "Continue" })
         })
+        if (!overlay)
+            return
         const screen = screenNamed(monitor.name)
         if (screen) {
             overlay.screen = screen
@@ -292,11 +299,11 @@ Window {
         const stored = readJson(themeStorePath)
         if (!stored || !stored.name)
             return null
-        if (stored.firstLaunch === true)
-            firstLaunchPlayed = true
         const colors = colorSet(stored.colors)
         if (!colors)
             return null
+        if (stored.firstLaunch === true)
+            firstLaunchPlayed = true
         return { name: stored.name, colors: colors }
     }
 

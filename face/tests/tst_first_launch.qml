@@ -193,4 +193,35 @@ TestCase {
         compare(escaped.resolutionShare, 50)
         compare(escaped.bitrate, 8)
     }
+
+    function test_changing_the_theme_recolors_the_penguin() {
+        const face = faceOn("shell-north.json", freshStore())
+        compare(face.penguinOutlineColor, "#e6edf3")
+        compare(face.penguinFillColor, "#7eb6ff")
+
+        face.setTheme("South")
+        compare(face.penguinOutlineColor, "#d0d0e0")
+        compare(face.penguinFillColor, "#0000bb")
+        verify(face.penguinOutlineColor !== "#000000")
+        verify(face.penguinFillColor !== "#ffcc00")
+        verify(face.penguinOutlineColor !== "#ffcc00")
+        verify(face.penguinFillColor !== "#000000")
+    }
+
+    function test_the_overlay_does_not_use_the_no_space_alarm() {
+        const face = faceOn("shell-north.json", freshStore())
+        face.showPlashka(Face.PlashkaEvent.NoSpace)
+        compare(face.plashkaColor, "#ff0000")
+        compare(face.plashkaEvent, Face.PlashkaEvent.NoSpace)
+        compare(face.penguinOutlineColor, "#e6edf3")
+        compare(face.penguinFillColor, "#7eb6ff")
+        compare(face.screenWipeColor, "#101418")
+        compare(face.firstLaunchTextColor, "#e6edf3")
+        compare(face.firstLaunchButtonColor, "#e6edf3")
+        verify(face.penguinOutlineColor !== face.plashkaColor)
+        verify(face.penguinFillColor !== face.plashkaColor)
+        verify(face.screenWipeColor !== face.plashkaColor)
+        verify(face.firstLaunchTextColor !== face.plashkaColor)
+        verify(face.firstLaunchButtonColor !== face.plashkaColor)
+    }
 }
