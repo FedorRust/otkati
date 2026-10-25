@@ -155,12 +155,12 @@ impl SavedOtkat {
         self.duration
     }
 
-    /// Encoded frame width, in pixels.
+    /// Encoded frame width, in pixels. Always even.
     pub fn width(&self) -> u32 {
         self.width
     }
 
-    /// Encoded frame height, in pixels.
+    /// Encoded frame height, in pixels. Always even.
     pub fn height(&self) -> u32 {
         self.height
     }
@@ -241,6 +241,11 @@ const PICTURE_BITRATE_MBIT: u8 = 25;
 
 /// Stand-in frame when the ring monitor's size is not known yet.
 const STAND_IN_FRAME: (u32, u32) = (16, 16);
+
+/// The encoder takes an even width and an even height.
+fn even_pixels(pixels: u32) -> u32 {
+    pixels - (pixels % 2)
+}
 
 /// Encoded seconds the ring holds, and the bind that asks to save an otkat.
 ///
@@ -394,7 +399,10 @@ impl Ring {
             .and_then(Screen::frame)
             .map(|(width, height)| {
                 let percent = u32::from(self.resolution_share.percent());
-                (width * percent / 100, height * percent / 100)
+                (
+                    even_pixels(width * percent / 100),
+                    even_pixels(height * percent / 100),
+                )
             })
             .unwrap_or(STAND_IN_FRAME);
         let bitrate_mbit = PICTURE_BITRATE_MBIT;

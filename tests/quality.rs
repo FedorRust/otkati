@@ -101,3 +101,28 @@ fn the_share_applies_to_each_side_of_the_monitor() {
     drop(seventy);
     assert_eq!(mp4_frame(&seventy_path), (1344, 756));
 }
+
+#[test]
+fn width_and_height_come_out_even() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.hold(Duration::from_secs(1));
+
+    ring.remember_screen(Screen::with_frame("desk", 1919, 1079));
+    ring.take_resolution_share(ResolutionShare::new(100));
+    let full = saved_otkat(&mut ring);
+    assert_eq!(full.width(), 1918);
+    assert_eq!(full.height(), 1078);
+    let full_path = folder.path.join(full.name());
+    drop(full);
+    assert_eq!(mp4_frame(&full_path), (1918, 1078));
+
+    ring.remember_screen(Screen::with_frame("laptop", 1366, 768));
+    ring.take_resolution_share(ResolutionShare::new(90));
+    let scaled = saved_otkat(&mut ring);
+    assert_eq!(scaled.width(), 1228);
+    assert_eq!(scaled.height(), 690);
+    let scaled_path = folder.path.join(scaled.name());
+    drop(scaled);
+    assert_eq!(mp4_frame(&scaled_path), (1228, 690));
+}
