@@ -52,6 +52,9 @@ Window {
     property var readyThemes: []
     property var themeByName: ({})
     property var settingsSurface: null
+    property var firstLaunchOverlay: null
+    property bool firstLaunchPlayed: false
+    readonly property bool firstLaunchVisible: firstLaunchOverlay !== null && firstLaunchOverlay.visible
     readonly property color settingsColor: settingsSurface ? settingsSurface.color : "transparent"
     readonly property color settingsTextColor: settingsSurface ? settingsSurface.ink : "transparent"
     readonly property bool settingsVisible: settingsSurface ? settingsSurface.visible : false
@@ -180,10 +183,26 @@ Window {
         settingsSurface.visible = true
     }
 
+    function playFirstLaunch() {
+        if (firstLaunchPlayed)
+            return
+        firstLaunchPlayed = true
+        rememberTheme()
+        if (!firstLaunchOverlay)
+            firstLaunchOverlay = firstLaunchComponent.createObject(null)
+    }
+
+    function continueFirstLaunch() {
+        if (firstLaunchOverlay)
+            firstLaunchOverlay.visible = false
+    }
+
     function storedTheme() {
         const stored = readJson(themeStorePath)
         if (!stored || !stored.name)
             return null
+        if (stored.firstLaunch === true)
+            firstLaunchPlayed = true
         const colors = colorSet(stored.colors)
         if (!colors)
             return null
@@ -193,10 +212,13 @@ Window {
     function rememberTheme() {
         if (!themeStorePath || !themeName)
             return
-        Files.writeText(themeStorePath, JSON.stringify({
+        const payload = {
             name: themeName,
             colors: themeColors
-        }))
+        }
+        if (firstLaunchPlayed)
+            payload.firstLaunch = true
+        Files.writeText(themeStorePath, JSON.stringify(payload))
     }
 
     function openSettings() {
@@ -204,6 +226,7 @@ Window {
         const stored = storedTheme()
         if (stored) {
             applyTheme(stored.name, stored.colors)
+            playFirstLaunch()
             return
         }
         let settings
@@ -219,6 +242,7 @@ Window {
             return
         applyTheme(matugen ? (theme.activePreset || "Matugen") : (theme.activePreset || ""), colors)
         rememberTheme()
+        playFirstLaunch()
     }
 
     function isMatugen(theme) {
@@ -235,6 +259,8 @@ Window {
     Component.onDestruction: {
         if (settingsSurface)
             settingsSurface.destroy()
+        if (firstLaunchOverlay)
+            firstLaunchOverlay.destroy()
     }
 
     function setLanguage(next) {
@@ -457,6 +483,17 @@ Window {
                 anchors.centerIn: parent
                 color: ink
             }
+        }
+    }
+
+    Component {
+        id: firstLaunchComponent
+        Window {
+            width: 640
+            height: 480
+            visible: true
+            color: "transparent"
+            flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
         }
     }
 
