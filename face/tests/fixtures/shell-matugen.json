@@ -1,0 +1,31 @@
+{
+  "theme": {
+    "activePreset": "Matugen",
+    "matugen": true,
+    "wallpaper": "/wallpapers/current.png",
+    "colors": {
+      "base": "#ffffff",
+      "mantle": "#ffffff",
+      "crust": "#ffffff",
+      "text": "#000000",
+      "subtext0": "#ffffff",
+      "subtext1": "#ffffff",
+      "surface0": "#ffffff",
+      "surface1": "#ffffff",
+      "surface2": "#ffffff",
+      "overlay0": "#ffffff",
+      "overlay1": "#ffffff",
+      "overlay2": "#ffffff",
+      "blue": "#ff00ff",
+      "sapphire": "#ffffff",
+      "peach": "#ffffff",
+      "green": "#ffffff",
+      "red": "#ffffff",
+      "mauve": "#ffffff",
+      "pink": "#ffffff",
+      "yellow": "#ffffff",
+      "maroon": "#ffffff",
+      "teal": "#ffffff"
+    }
+  }
+}

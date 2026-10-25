@@ -1,0 +1,3 @@
+module Otkati.Files
+plugin otkatifiles
+classname FilesPlugin

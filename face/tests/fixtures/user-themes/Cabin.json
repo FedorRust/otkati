@@ -1,0 +1,27 @@
+{
+  "name": "Cabin",
+  "colors": {
+    "base": "#303030",
+    "mantle": "#303131",
+    "crust": "#303132",
+    "text": "#eeeeee",
+    "subtext0": "#dddddd",
+    "subtext1": "#cccccc",
+    "surface0": "#404040",
+    "surface1": "#404141",
+    "surface2": "#404142",
+    "overlay0": "#505050",
+    "overlay1": "#505151",
+    "overlay2": "#505152",
+    "blue": "#3333cc",
+    "sapphire": "#3333cd",
+    "peach": "#cc6633",
+    "green": "#33cc66",
+    "red": "#cc3366",
+    "mauve": "#6633cc",
+    "pink": "#cc3399",
+    "yellow": "#cccc33",
+    "maroon": "#993344",
+    "teal": "#33cccc"
+  }
+}
