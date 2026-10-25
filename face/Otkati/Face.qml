@@ -65,6 +65,20 @@ Window {
             && firstLaunchOverlay.coversMonitor
             && firstLaunchOverlay.width === firstLaunchOverlay.monitorWidth
             && firstLaunchOverlay.height === firstLaunchOverlay.monitorHeight
+    readonly property string firstLaunchStep: firstLaunchOverlay ? firstLaunchOverlay.step : ""
+    readonly property real screenWipe: firstLaunchOverlay ? firstLaunchOverlay.wipe : 0
+    readonly property real screenWipeWidth: firstLaunchOverlay ? firstLaunchOverlay.screenWipeWidth : 0
+    readonly property var firstLaunchLines: [
+        "Welcome",
+        "The last minutes are already kept.",
+        "Alt+Z saves a clip.",
+        "FedorRust"
+    ]
+    readonly property var typedLines: firstLaunchOverlay ? firstLaunchOverlay.typedLines : []
+    readonly property real penguinFillLevel: firstLaunchOverlay ? firstLaunchOverlay.fillLevel : 0
+    readonly property real penguinFillTop: firstLaunchOverlay ? firstLaunchOverlay.penguinFillTop : 0
+    readonly property real penguinFillHeight: firstLaunchOverlay ? firstLaunchOverlay.penguinFillHeight : 0
+    readonly property real penguinHeight: firstLaunchOverlay ? firstLaunchOverlay.penguinHeight : 0
     readonly property color settingsColor: settingsSurface ? settingsSurface.color : "transparent"
     readonly property color settingsTextColor: settingsSurface ? settingsSurface.ink : "transparent"
     readonly property bool settingsVisible: settingsSurface ? settingsSurface.visible : false
@@ -228,7 +242,12 @@ Window {
             monitorHeight: monitor.height,
             width: monitor.width,
             height: monitor.height,
-            coversMonitor: true
+            coversMonitor: true,
+            lines: Qt.binding(function() { return root.firstLaunchLines }),
+            wipeColor: Qt.binding(function() { return root.themeColors.base }),
+            lineColor: Qt.binding(function() { return root.themeColors.text }),
+            outlineColor: Qt.binding(function() { return root.themeColors.text }),
+            fillColor: Qt.binding(function() { return root.themeColors.blue })
         })
         const screen = screenNamed(monitor.name)
         if (screen) {
@@ -543,17 +562,7 @@ Window {
 
     Component {
         id: firstLaunchComponent
-        Window {
-            property string monitorName: ""
-            property int monitorWidth: 0
-            property int monitorHeight: 0
-            property bool coversMonitor: false
-            width: 640
-            height: 480
-            visible: true
-            color: "transparent"
-            flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        }
+        FirstLaunch {}
     }
 
     Rectangle {

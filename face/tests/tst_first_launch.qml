@@ -86,4 +86,37 @@ TestCase {
         compare(face.firstLaunchWidth, 1920)
         compare(face.firstLaunchHeight, 1080)
     }
+
+    function test_the_overlay_wipes_then_types_four_lines_then_fills_the_penguin() {
+        const face = faceOn("shell-north.json", freshStore())
+        const lines = [
+            "Welcome",
+            "The last minutes are already kept.",
+            "Alt+Z saves a clip.",
+            "FedorRust"
+        ]
+
+        compare(face.firstLaunchStep, "wipe")
+        verify(face.screenWipe < 1)
+
+        tryCompare(face, "firstLaunchStep", "lines")
+        compare(face.screenWipe, 1)
+        compare(face.screenWipeWidth, face.firstLaunchWidth)
+        compare(face.firstLaunchLines[0], lines[0])
+        compare(face.firstLaunchLines[1], lines[1])
+        compare(face.firstLaunchLines[2], lines[2])
+        compare(face.firstLaunchLines[3], lines[3])
+        verify(face.typedLines.join("").length < lines.join("").length)
+
+        tryVerify(function() { return face.typedLines.join("\n") === lines.join("\n") })
+
+        tryCompare(face, "firstLaunchStep", "penguin")
+        verify(face.penguinFillLevel < 1)
+        verify(face.penguinFillHeight < face.penguinHeight)
+        verify(Math.abs((face.penguinFillTop + face.penguinFillHeight) - face.penguinHeight) <= 1)
+
+        tryCompare(face, "penguinFillLevel", 1)
+        verify(Math.abs(face.penguinFillHeight - face.penguinHeight) <= 1)
+        verify(Math.abs((face.penguinFillTop + face.penguinFillHeight) - face.penguinHeight) <= 1)
+    }
 }
