@@ -197,3 +197,19 @@ fn the_bitrate_runs_from_8_to_80_mbit() {
         drop(saved);
     }
 }
+
+#[test]
+fn sound_does_not_change_the_picture_quality() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.remember_screen(Screen::with_frame("desk", 1920, 1080));
+    ring.hold(Duration::from_secs(1));
+    ring.output_sound();
+    ring.microphone();
+
+    let saved = saved_otkat(&mut ring);
+
+    assert_eq!(saved.width(), 1920);
+    assert_eq!(saved.height(), 1080);
+    assert_eq!(saved.bitrate_mbit(), 25);
+}

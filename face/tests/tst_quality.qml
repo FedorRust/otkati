@@ -67,4 +67,18 @@ TestCase {
         compare(face.bitrate, 80)
         compare(face.resolutionShare, 50)
     }
+
+    function test_there_is_no_audio_quality_knob() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        compare(face.settingLabel("audioQuality"), "")
+        compare(face.settingLabel("resolutionShare"), "Resolution share")
+        compare(face.settingLabel("bitrate"), "Bitrate")
+        compare(face["audioQuality"], undefined)
+        compare(face["audioBitrate"], undefined)
+        face.chooseLanguage("ru")
+        compare(face.settingLabel("audioQuality"), "")
+        compare(face.settingLabel("resolutionShare"), "Доля разрешения")
+        compare(face.settingLabel("bitrate"), "Битрейт")
+    }
 }
