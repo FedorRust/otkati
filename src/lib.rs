@@ -295,8 +295,12 @@ impl Ring {
     }
 
     /// The face hands the ring an encoder item.
+    ///
+    /// An item this card cannot do leaves the current encoder in place.
     pub fn take_encoder(&mut self, encoder: Encoder) {
-        self.encoder = encoder;
+        if self.offered_encoders().contains(&encoder) {
+            self.encoder = encoder;
+        }
     }
 
     /// The card on this machine. The chosen encoder stays as it is.

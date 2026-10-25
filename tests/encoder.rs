@@ -74,3 +74,21 @@ fn switching_to_hevc_on_a_3060_ti_keeps_the_mp4_name() {
     drop(event);
     assert!(folder.path.join("otkat1-2026-10-25.mp4").is_file());
 }
+
+#[test]
+fn choosing_av1_on_a_3060_ti_leaves_the_current_encoder() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.see_card(Card::Nvidia3060Ti);
+    ring.take_encoder(Encoder::Hevc);
+    ring.hold(Duration::from_secs(1));
+
+    ring.take_encoder(Encoder::Av1);
+
+    assert_eq!(ring.encoder(), Encoder::Hevc);
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
+}
