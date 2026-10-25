@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
+use std::ffi::CString;
 use std::fs;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
@@ -209,6 +211,8 @@ pub enum PlashkaEvent {
     NoAccess,
     /// The otkat folder could not be created, so there is no file.
     FolderNotCreated,
+    /// The disk has no space, so no finished otkat is written.
+    NoSpace,
     /// The ring is off, so the bind saves nothing.
     RingOff,
 }
@@ -219,6 +223,7 @@ impl PartialEq for PlashkaEvent {
             (Self::NothingToSave, Self::NothingToSave) => true,
             (Self::NoAccess, Self::NoAccess) => true,
             (Self::FolderNotCreated, Self::FolderNotCreated) => true,
+            (Self::NoSpace, Self::NoSpace) => true,
             (Self::RingOff, Self::RingOff) => true,
             (Self::Saved(left), Self::Saved(right)) => {
                 left.name == right.name && left.duration == right.duration
@@ -344,6 +349,9 @@ fn encode_mp4(
         Ok(())
     } else {
         let detail = String::from_utf8_lossy(&output.stderr);
+        if detail.contains("No space left on device") {
+            let _ = fs::remove_file(path);
+        }
         Err(std::io::Error::other(format!(
             "ffmpeg exited with {}: {detail}",
             output.status
@@ -733,11 +741,12 @@ impl Ring {
     /// waiting for the person's screen, answers with
     /// [`PlashkaEvent::NoAccess`]. When the ring holds no frame, answers with
     /// [`PlashkaEvent::NothingToSave`]. When the otkat folder cannot be
-    /// created, answers with [`PlashkaEvent::FolderNotCreated`]. None of those
-    /// creates a file. A ring that holds frames and can use the folder answers
-    /// with [`PlashkaEvent::Saved`]; the file is written when that value is
-    /// dropped. The answer does not wait for an earlier file that is still
-    /// being written. That otkat keeps the ring as it is at this bind and
+    /// created, answers with [`PlashkaEvent::FolderNotCreated`]. When the disk
+    /// has no free space, answers with [`PlashkaEvent::NoSpace`]. None of those
+    /// creates a file. A ring that holds frames, can use the folder, and has
+    /// room answers with [`PlashkaEvent::Saved`]; the file is written when that
+    /// value is dropped. The answer does not wait for an earlier file that is
+    /// still being written. That otkat keeps the ring as it is at this bind and
     /// waits in the queue.
     pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
         if chord != self.bind {
@@ -754,6 +763,9 @@ impl Ring {
         }
         if !otkat_folder_can_be_created(&self.otkat_folder) {
             return Some(PlashkaEvent::FolderNotCreated);
+        }
+        if !filesystem_has_room(&self.otkat_folder) {
+            return Some(PlashkaEvent::NoSpace);
         }
         let day = (self.clock)();
         let duration = self.held.min(self.chosen_length);
@@ -791,6 +803,54 @@ impl Ring {
             }),
         }))
     }
+}
+
+fn filesystem_has_room(path: &Path) -> bool {
+    let Some(existing) = nearest_existing(path) else {
+        return true;
+    };
+    available_blocks(existing).is_none_or(|blocks| blocks > 0)
+}
+
+fn nearest_existing(mut path: &Path) -> Option<&Path> {
+    loop {
+        if path.exists() {
+            return Some(path);
+        }
+        path = path.parent()?;
+    }
+}
+
+fn available_blocks(path: &Path) -> Option<u64> {
+    let c_path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut stat = unsafe { std::mem::zeroed::<Statvfs>() };
+    let rc = unsafe { statvfs(c_path.as_ptr(), &mut stat) };
+    if rc == 0 {
+        Some(stat.f_bavail)
+    } else {
+        None
+    }
+}
+
+#[repr(C)]
+struct Statvfs {
+    f_bsize: u64,
+    f_frsize: u64,
+    f_blocks: u64,
+    f_bfree: u64,
+    f_bavail: u64,
+    f_files: u64,
+    f_ffree: u64,
+    f_favail: u64,
+    f_fsid: u64,
+    f_flag: u64,
+    f_namemax: u64,
+    f_type: u32,
+    spare: [i32; 5],
+}
+
+extern "C" {
+    fn statvfs(path: *const std::os::raw::c_char, buf: *mut Statvfs) -> i32;
 }
 
 fn home_dir() -> PathBuf {
