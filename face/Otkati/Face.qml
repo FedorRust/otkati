@@ -10,7 +10,10 @@ Window {
     flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
 
     enum PlashkaEvent {
-        NothingToSave
+        NothingToSave,
+        NoSpace,
+        ClipDidNotSave,
+        Ordinary
     }
 
     readonly property var colorKeys: [
@@ -32,7 +35,9 @@ Window {
     property var themeByName: ({})
     property var settingsSurface: null
     readonly property color settingsColor: settingsSurface ? settingsSurface.color : "transparent"
+    readonly property color settingsTextColor: settingsSurface ? settingsSurface.ink : "transparent"
     readonly property bool settingsVisible: settingsSurface ? settingsSurface.visible : false
+    property int shownPlashka: -1
     readonly property alias plashkaText: label.text
     readonly property alias plashkaColor: background.color
 
@@ -112,6 +117,7 @@ Window {
         themeName = name
         themeColors = colors
         settingsSurface.color = colors.base
+        settingsSurface.ink = colors.text
         settingsSurface.visible = true
     }
 
@@ -163,7 +169,7 @@ Window {
     function setLanguage(next) {
         language = next
         if (visible)
-            label.text = nothingToSaveText()
+            label.text = plashkaTextFor(shownPlashka)
     }
 
     function nothingToSaveText() {
@@ -172,10 +178,32 @@ Window {
         return "Nothing to save"
     }
 
+    function clipDidNotSaveText() {
+        if (language === "ru")
+            return "Откат не сохранился"
+        return "Couldn't save the clip"
+    }
+
+    function plashkaTextFor(event) {
+        if (event === Face.PlashkaEvent.NothingToSave)
+            return nothingToSaveText()
+        if (event === Face.PlashkaEvent.ClipDidNotSave)
+            return clipDidNotSaveText()
+        return ""
+    }
+
     function showPlashka(event) {
-        if (event !== Face.PlashkaEvent.NothingToSave)
+        const alarm = event === Face.PlashkaEvent.NothingToSave
+                || event === Face.PlashkaEvent.NoSpace
+                || event === Face.PlashkaEvent.ClipDidNotSave
+        if (!alarm && event !== Face.PlashkaEvent.Ordinary)
             return
-        label.text = nothingToSaveText()
+        shownPlashka = event
+        label.text = plashkaTextFor(event)
+        if (alarm)
+            background.color = "#ff0000"
+        else if (themeColors.base)
+            background.color = themeColors.base
         visible = true
         hideTimer.restart()
     }
@@ -189,9 +217,15 @@ Window {
     Component {
         id: settingsWindowComponent
         Window {
+            property color ink: "transparent"
             width: 360
             height: 240
             color: "transparent"
+
+            Text {
+                anchors.centerIn: parent
+                color: ink
+            }
         }
     }
 

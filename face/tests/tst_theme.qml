@@ -210,4 +210,49 @@ TestCase {
         compare(again.themeColors.text, "#abcabc")
         compare(again.themeColors.blue, "#445566")
     }
+
+    function test_the_theme_paints_an_ordinary_plashka_and_alarms_stay_red() {
+        const face = faceOn("shell-north.json", freshStore())
+        compare(face.settingsColor, "#101418")
+        compare(face.settingsTextColor, "#e6edf3")
+
+        face.showPlashka(Face.PlashkaEvent.Ordinary)
+        compare(face.visible, true)
+        compare(face.plashkaColor, "#101418")
+        compare(face.plashkaText, "")
+
+        face.showPlashka(Face.PlashkaEvent.NothingToSave)
+        compare(face.plashkaColor, "#ff0000")
+        compare(face.plashkaText, "Nothing to save")
+
+        face.showPlashka(Face.PlashkaEvent.NoSpace)
+        compare(face.plashkaColor, "#ff0000")
+        compare(face.plashkaText, "")
+
+        face.showPlashka(Face.PlashkaEvent.ClipDidNotSave)
+        compare(face.plashkaColor, "#ff0000")
+        compare(face.plashkaText, "Couldn't save the clip")
+
+        face.setTheme("South")
+        compare(face.settingsColor, "#202020")
+        compare(face.settingsTextColor, "#d0d0e0")
+        face.showPlashka(Face.PlashkaEvent.Ordinary)
+        compare(face.plashkaColor, face.settingsColor)
+
+        face.showPlashka(Face.PlashkaEvent.NothingToSave)
+        compare(face.plashkaColor, "#ff0000")
+        face.showPlashka(Face.PlashkaEvent.NoSpace)
+        compare(face.plashkaColor, "#ff0000")
+        face.showPlashka(Face.PlashkaEvent.ClipDidNotSave)
+        compare(face.plashkaColor, "#ff0000")
+        compare(face.plashkaText, "Couldn't save the clip")
+        face.setLanguage("ru")
+        compare(face.plashkaText, "Откат не сохранился")
+        compare(face.plashkaColor, "#ff0000")
+
+        face.showPlashka(Face.PlashkaEvent.NoSpace)
+        face.setLanguage("en")
+        compare(face.plashkaText, "")
+        compare(face.plashkaColor, "#ff0000")
+    }
 }
