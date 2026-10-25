@@ -52,7 +52,7 @@ Window {
     }
 
     function setLength(seconds) {
-        if (seconds < 15 || seconds > 1200)
+        if (!Number.isInteger(seconds) || seconds < 15 || seconds > 1200)
             return
         length = seconds
     }

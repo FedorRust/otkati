@@ -34,4 +34,12 @@ TestCase {
         face.setLength(1201)
         compare(face.length, 600)
     }
+
+    function test_a_fraction_of_a_second_is_not_handed() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.setLength(90)
+        face.setLength(91.5)
+        compare(face.length, 90)
+    }
 }
