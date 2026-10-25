@@ -92,6 +92,9 @@ Window {
     property int ringPlace: Face.RingPlace.Memory
     // The switch the face hands to the ring. On until the person turns the ring off.
     property bool ringOn: true
+    // The ring monitor the face hands to the ring. Empty until the person chooses one.
+    // The program does not fill this from position, focus, or a connector name.
+    property string ringMonitor: ""
 
     function knob(key) {
         if (key === "ringPlace")
@@ -102,6 +105,8 @@ Window {
             return sideShare
         if (key === "bitrate")
             return bitrate
+        if (key === "ringMonitor")
+            return ringMonitor
         return undefined
     }
     // Reported by the shell. The program language does not follow either value.
@@ -307,6 +312,10 @@ Window {
 
     function setSwitch(gathering) {
         ringOn = gathering
+    }
+
+    function setRingMonitor(name) {
+        ringMonitor = name
     }
 
     function setShellLanguage(next) {
