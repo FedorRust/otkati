@@ -47,6 +47,7 @@ impl Screen {
 pub struct Ring {
     otkat_folder: PathBuf,
     waiting_for_screen: bool,
+    screen: Option<Screen>,
 }
 
 impl Ring {
@@ -60,6 +61,7 @@ impl Ring {
         Self {
             otkat_folder: otkat_folder.into(),
             waiting_for_screen: false,
+            screen: None,
         }
     }
 
@@ -67,12 +69,28 @@ impl Ring {
     ///
     /// `remembered` is the screen kept from an earlier answer. Without one,
     /// the session is waiting for the person: a bind reports
-    /// [`PlashkaEvent::NoAccess`] and writes no otkat.
+    /// [`PlashkaEvent::NoAccess`] and writes no otkat. The next entry that
+    /// receives that screen does not ask again, and the screen is the ring's
+    /// monitor.
     pub fn enter_session(otkat_folder: impl Into<PathBuf>, remembered: Option<Screen>) -> Self {
+        let waiting_for_screen = remembered.is_none();
         Self {
             otkat_folder: otkat_folder.into(),
-            waiting_for_screen: remembered.is_none(),
+            waiting_for_screen,
+            screen: remembered,
         }
+    }
+
+    /// Whether this session still asks which screen to give the program.
+    pub fn asks_which_screen(&self) -> bool {
+        self.waiting_for_screen
+    }
+
+    /// The person answered with this screen. It is the ring's monitor, and
+    /// the session stops asking.
+    pub fn remember_screen(&mut self, screen: Screen) {
+        self.screen = Some(screen);
+        self.waiting_for_screen = false;
     }
 
     /// Offer a screen to the ring.
@@ -81,9 +99,9 @@ impl Ring {
     /// and does not become the ring's monitor.
     pub fn offer_screen(&mut self, _screen: Screen) {}
 
-    /// The ring's monitor, once the person has answered which screen to give.
+    /// The ring's monitor: the screen from the person's answer.
     pub fn monitor(&self) -> Option<&Screen> {
-        None
+        self.screen.as_ref()
     }
 
     /// The bind was pressed.

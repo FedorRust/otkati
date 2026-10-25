@@ -59,3 +59,19 @@ fn until_the_person_answers_the_offered_screen_stays_out_of_the_ring() {
         "an offered screen is not an otkat while the person has not answered"
     );
 }
+
+#[test]
+fn the_answered_screen_is_remembered_for_the_next_session() {
+    let folder = OtkatFolder::new();
+    let screen = Screen::new("Alexey's screen");
+
+    let mut first = Ring::enter_session(folder.path.clone(), None);
+    assert!(first.asks_which_screen());
+    first.remember_screen(screen.clone());
+    assert!(!first.asks_which_screen());
+    assert_eq!(first.monitor(), Some(&screen));
+
+    let next = Ring::enter_session(folder.path.clone(), Some(screen.clone()));
+    assert!(!next.asks_which_screen());
+    assert_eq!(next.monitor(), Some(&screen));
+}
