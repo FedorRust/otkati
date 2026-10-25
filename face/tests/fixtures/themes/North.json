@@ -1,0 +1,27 @@
+{
+  "name": "North",
+  "colors": {
+    "base": "#010101",
+    "mantle": "#020202",
+    "crust": "#030303",
+    "text": "#040404",
+    "subtext0": "#050505",
+    "subtext1": "#060606",
+    "surface0": "#070707",
+    "surface1": "#080808",
+    "surface2": "#090909",
+    "overlay0": "#0a0a0a",
+    "overlay1": "#0b0b0b",
+    "overlay2": "#0c0c0c",
+    "blue": "#0d0d0d",
+    "sapphire": "#0e0e0e",
+    "peach": "#0f0f0f",
+    "green": "#101010",
+    "red": "#111111",
+    "mauve": "#121212",
+    "pink": "#131313",
+    "yellow": "#141414",
+    "maroon": "#151515",
+    "teal": "#161616"
+  }
+}
