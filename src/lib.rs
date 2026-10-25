@@ -197,6 +197,44 @@ impl Screen {
     }
 }
 
+/// A monitor that is connected.
+///
+/// `position` is where it sits, `focused` is whether it has focus, and
+/// `connector` is its connector name. The ring is told all three and does not
+/// choose a ring monitor from them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectedMonitor {
+    screen: Screen,
+    position: (i32, i32),
+    focused: bool,
+    connector: String,
+}
+
+impl ConnectedMonitor {
+    /// One connected monitor, as the capture boundary reports it.
+    ///
+    /// This is not a Wayland output. `position`, `focused`, and `connector`
+    /// do not decide the ring monitor.
+    pub fn new(
+        screen: Screen,
+        position: (i32, i32),
+        focused: bool,
+        connector: impl Into<String>,
+    ) -> Self {
+        Self {
+            screen,
+            position,
+            focused,
+            connector: connector.into(),
+        }
+    }
+
+    /// The screen this connected monitor is.
+    pub fn screen(&self) -> &Screen {
+        &self.screen
+    }
+}
+
 /// A moment of one monitor handed to the ring.
 ///
 /// This is the capture boundary's report of that monitor. It is not a
@@ -762,6 +800,21 @@ impl Ring {
     /// a connector name.
     pub fn monitor(&self) -> Option<&Screen> {
         self.screen.as_ref()
+    }
+
+    /// Which monitors are connected.
+    ///
+    /// Position, focus, and connector name do not choose the ring monitor.
+    /// A monitor at `0x0`, the focused monitor, or a connector such as `DP-1`
+    /// stays out unless the person chose it. When the person has not chosen,
+    /// none of these becomes the ring monitor.
+    pub fn see_connected_monitors(&mut self, monitors: &[ConnectedMonitor]) {
+        for monitor in monitors {
+            let _position = monitor.position;
+            let _focused = monitor.focused;
+            let _connector = monitor.connector.as_str();
+            let _screen = monitor.screen.name();
+        }
     }
 
     /// The face hands the ring the monitor the person chose in settings.
