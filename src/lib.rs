@@ -281,8 +281,12 @@ impl Ring {
 
     /// The ring holds `held` of encoded time.
     ///
-    /// Live capture from the monitor fills this in a later ticket.
+    /// While the switch is off the ring is not gathering, so this leaves the
+    /// ring unchanged. Live capture from the monitor fills this in a later ticket.
     pub fn hold(&mut self, held: Duration) {
+        if self.switch == Switch::Off {
+            return;
+        }
         self.held = held;
     }
 
@@ -290,8 +294,14 @@ impl Ring {
     ///
     /// [`Switch::Off`] stops the ring and does not end the process. A bind
     /// then answers with [`PlashkaEvent::RingOff`] and writes no otkat.
+    /// [`Switch::On`] after that starts the ring over, so minutes from before
+    /// the switch and while it was off are not in the next otkat.
     pub fn take_switch(&mut self, switch: Switch) {
+        let turning_on = self.switch == Switch::Off && switch == Switch::On;
         self.switch = switch;
+        if self.switch == Switch::Off || turning_on {
+            self.held = Duration::ZERO;
+        }
     }
 
     /// The face hands the ring a new bind.
