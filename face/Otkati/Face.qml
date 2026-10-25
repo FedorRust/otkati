@@ -99,6 +99,8 @@ Window {
     property string bind: "Alt+Z"
     // Percent of each side of the ring monitor. 100 until the person changes it.
     property int resolutionShare: 100
+    // Full sides until the resolution share changes.
+    readonly property int sideShare: resolutionShare
     // Picture bitrate in Mbit/s. 25 until the person changes it.
     // It does not follow the resolution share. There is no audio-quality knob.
     property int bitrate: 25
@@ -107,12 +109,39 @@ Window {
     readonly property var encoderItems: ["H.264", "HEVC", "AV1"]
     // Items the ring says this card can do. H.264 until the ring says otherwise.
     property var offeredEncoders: ["H.264"]
+    // Knobs the face can hand the ring. The microphone stays in the clip
+    // while the ring is on, so there is no microphone-only knob.
+    readonly property var knobNames: [
+        "length",
+        "resolutionShare",
+        "bitrate",
+        "encoder",
+        "ringPlace",
+        "ringMonitor",
+        "bind",
+        "language",
+        "theme",
+        "otkatFolder",
+        "switch"
+    ]
     // The length, in seconds, the face hands to the ring. Ten minutes until the person changes it.
     property int length: 600
     // The ring place the face hands to the ring. Memory until the person chooses disk.
     property int ringPlace: Face.RingPlace.Memory
     // The switch the face hands to the ring. On until the person turns the ring off.
     property bool ringOn: true
+
+    function knob(key) {
+        if (key === "ringPlace")
+            return ringPlace
+        if (key === "encoder")
+            return encoder
+        if (key === "sideShare")
+            return sideShare
+        if (key === "bitrate")
+            return bitrate
+        return undefined
+    }
     // Reported by the shell. The program language does not follow either value.
     property string shellLanguage: ""
     property string serpantinumLanguage: ""
