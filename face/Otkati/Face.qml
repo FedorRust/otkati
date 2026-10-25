@@ -56,6 +56,8 @@ Window {
     // Picture bitrate in Mbit/s. 25 until the person changes it.
     // It does not follow the resolution share. There is no audio-quality knob.
     property int bitrate: 25
+    // The length, in seconds, the face hands to the ring. Ten minutes until the person changes it.
+    property int length: 600
     // The switch the face hands to the ring. On until the person turns the ring off.
     property bool ringOn: true
     // Reported by the shell. The program language does not follow either value.
@@ -243,6 +245,12 @@ Window {
         if (mbit < 8 || mbit > 80 || mbit % 1 !== 0)
             return
         bitrate = mbit
+    }
+
+    function setLength(seconds) {
+        if (!Number.isInteger(seconds) || seconds < 15 || seconds > 1200)
+            return
+        length = seconds
     }
 
     function setSwitch(gathering) {
