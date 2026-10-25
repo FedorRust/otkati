@@ -25,4 +25,13 @@ TestCase {
         face.setLength(1200)
         compare(face.length, 1200)
     }
+
+    function test_a_length_outside_fifteen_seconds_to_twenty_minutes_is_not_handed() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.setLength(14)
+        compare(face.length, 600)
+        face.setLength(1201)
+        compare(face.length, 600)
+    }
 }
