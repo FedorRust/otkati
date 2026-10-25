@@ -317,20 +317,17 @@ impl Ring {
 
     /// Encoder items this card can do, in knob order.
     ///
-    /// Until the ring has seen a card, the only item is H.264.
+    /// Until the ring has seen a card, the only item is H.264. H.264 is always
+    /// offered. HEVC and AV1 follow the NVIDIA or AMD path the ring picks.
     pub fn offered_encoders(&self) -> Vec<Encoder> {
         let mut offered = vec![Encoder::H264];
-        if match self.card {
-            Some(Card::Nvidia3060Ti | Card::Nvidia3070Ti | Card::Nvidia40Series) => true,
-            Some(Card::Amd {
-                hevc: true,
-                rx_7000: false,
-            }) => true,
-            _ => false,
-        } {
+        let Some(card) = self.card else {
+            return offered;
+        };
+        if hevc_offered(card) {
             offered.push(Encoder::Hevc);
         }
-        if matches!(self.card, Some(Card::Nvidia40Series)) {
+        if av1_offered(card) {
             offered.push(Encoder::Av1);
         }
         offered
@@ -385,6 +382,34 @@ impl Ring {
             duration,
             pending: Some(PendingOtkat { path, duration }),
         }))
+    }
+}
+
+/// The path the ring picks from the card. The person does not choose it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum VendorPath {
+    Nvidia,
+    Amd,
+}
+
+fn vendor_path(card: Card) -> VendorPath {
+    match card {
+        Card::Nvidia3060Ti | Card::Nvidia3070Ti | Card::Nvidia40Series => VendorPath::Nvidia,
+        Card::Amd { .. } => VendorPath::Amd,
+    }
+}
+
+fn hevc_offered(card: Card) -> bool {
+    match vendor_path(card) {
+        VendorPath::Nvidia => true,
+        VendorPath::Amd => matches!(card, Card::Amd { hevc: true, .. }),
+    }
+}
+
+fn av1_offered(card: Card) -> bool {
+    match vendor_path(card) {
+        VendorPath::Nvidia => matches!(card, Card::Nvidia40Series),
+        VendorPath::Amd => matches!(card, Card::Amd { rx_7000: true, .. }),
     }
 }
 

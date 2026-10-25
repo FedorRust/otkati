@@ -171,3 +171,28 @@ fn an_amd_card_that_cannot_do_hevc_offers_only_h264() {
     ring.take_encoder(Encoder::Av1);
     assert_eq!(ring.encoder(), Encoder::H264);
 }
+
+#[test]
+fn an_rx_7000_offers_av1_and_the_otkat_stays_mp4() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.see_card(Card::Amd {
+        hevc: true,
+        rx_7000: true,
+    });
+    ring.hold(Duration::from_secs(1));
+
+    assert_eq!(ring.encoder(), Encoder::H264);
+    assert_eq!(
+        ring.offered_encoders(),
+        vec![Encoder::H264, Encoder::Hevc, Encoder::Av1]
+    );
+
+    ring.take_encoder(Encoder::Av1);
+    assert_eq!(ring.encoder(), Encoder::Av1);
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
+}
