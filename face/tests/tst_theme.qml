@@ -255,4 +255,12 @@ TestCase {
         compare(face.plashkaText, "")
         compare(face.plashkaColor, "#ff0000")
     }
+
+    function test_a_matugen_preset_without_the_flag_still_takes_the_wallpaper() {
+        const face = faceOn("shell-matugen-preset.json", freshStore())
+        compare(face.themeName, "Matugen")
+        compare(face.settingsColor, "#112233")
+        compare(face.themeColors.text, "#abcabc")
+        compare(face.themeColors.blue, "#445566")
+    }
 }

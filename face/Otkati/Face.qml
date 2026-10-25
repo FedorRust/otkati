@@ -154,11 +154,23 @@ Window {
             return
         }
         const theme = settings.theme || {}
-        const colors = theme.matugen === true ? colorsFrom(readJson(matugenColorsPath)) : colorSet(theme.colors)
+        const matugen = isMatugen(theme)
+        const colors = matugen ? colorsFrom(readJson(matugenColorsPath)) : colorSet(theme.colors)
         if (!colors)
             return
-        applyTheme(theme.activePreset || "", colors)
+        applyTheme(matugen ? (theme.activePreset || "Matugen") : (theme.activePreset || ""), colors)
         rememberTheme()
+    }
+
+    function isMatugen(theme) {
+        if (theme.matugen !== undefined)
+            return theme.matugen === true
+        return theme.theme === "matugen"
+                || theme.name === "matugen"
+                || theme.currentTheme === "matugen"
+                || theme.current === "matugen"
+                || theme.activePreset === "Matugen"
+                || theme.activePreset === undefined
     }
 
     Component.onDestruction: {
