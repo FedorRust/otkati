@@ -51,6 +51,10 @@ Window {
         bind = chord
     }
 
+    function setLength(seconds) {
+        length = seconds
+    }
+
     function setShellLanguage(next) {
         shellLanguage = next
     }
