@@ -27,9 +27,11 @@ pub enum PlashkaEvent {
 
 /// Encoded seconds the ring holds, and the bind that asks to save an otkat.
 ///
-/// A newly created ring holds no frame.
+/// A newly created ring holds no frame and listens for [`Ring::default_bind`]
+/// until the face hands it a new one.
 pub struct Ring {
     otkat_folder: PathBuf,
+    bind: Bind,
 }
 
 impl Ring {
@@ -42,7 +44,16 @@ impl Ring {
     pub fn new(otkat_folder: impl Into<PathBuf>) -> Self {
         Self {
             otkat_folder: otkat_folder.into(),
+            bind: Self::default_bind(),
         }
+    }
+
+    /// The face hands the ring a new bind.
+    ///
+    /// The ring saves on that chord, and the previous chord no longer does.
+    /// No Hyprland config is read or written.
+    pub fn take_bind(&mut self, bind: Bind) {
+        self.bind = bind;
     }
 
     /// `chord` reached the ring.
@@ -51,7 +62,7 @@ impl Ring {
     /// [`PlashkaEvent::NothingToSave`] and does not create a file in the otkat
     /// folder. Any other chord does not save.
     pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
-        if chord != Self::default_bind() {
+        if chord != self.bind {
             return None;
         }
         let _ = &self.otkat_folder;
