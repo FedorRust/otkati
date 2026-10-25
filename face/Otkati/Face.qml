@@ -115,6 +115,8 @@ Window {
     readonly property alias plashkaText: label.text
     readonly property alias plashkaColor: background.color
     readonly property int plashkaEvent: plashka.event
+    // The plashka is shown on the current ring monitor.
+    readonly property string plashkaMonitor: ringMonitor
 
     QtObject {
         id: plashka
