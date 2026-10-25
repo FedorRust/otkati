@@ -54,6 +54,14 @@ Window {
         bind = chord
     }
 
+    function setResolutionShare(percent) {
+        resolutionShare = percent
+    }
+
+    function setBitrate(mbit) {
+        bitrate = mbit
+    }
+
     function setShellLanguage(next) {
         shellLanguage = next
     }
