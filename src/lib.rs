@@ -75,6 +75,17 @@ impl Ring {
         }
     }
 
+    /// Offer a screen to the ring.
+    ///
+    /// Until the person has answered, the screen does not enter the ring
+    /// and does not become the ring's monitor.
+    pub fn offer_screen(&mut self, _screen: Screen) {}
+
+    /// The ring's monitor, once the person has answered which screen to give.
+    pub fn monitor(&self) -> Option<&Screen> {
+        None
+    }
+
     /// The bind was pressed.
     ///
     /// An empty ring answers with [`PlashkaEvent::NothingToSave`] and does not

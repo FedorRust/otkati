@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use otkati::{PlashkaEvent, Ring};
+use otkati::{PlashkaEvent, Ring, Screen};
 
 struct OtkatFolder {
     path: PathBuf,
@@ -41,5 +41,21 @@ fn bind_before_the_screen_answer_reports_no_access_and_writes_no_file() {
     assert!(
         written.is_empty(),
         "a ring with no screen answer must not put a file in the otkat folder"
+    );
+}
+
+#[test]
+fn until_the_person_answers_the_offered_screen_stays_out_of_the_ring() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::enter_session(folder.path.clone(), None);
+
+    ring.offer_screen(Screen::new("Alexey's screen"));
+
+    assert!(ring.monitor().is_none());
+    assert_eq!(ring.bind(), PlashkaEvent::NoAccess);
+    let written: Vec<_> = fs::read_dir(&folder.path).unwrap().collect();
+    assert!(
+        written.is_empty(),
+        "an offered screen is not an otkat while the person has not answered"
     );
 }
