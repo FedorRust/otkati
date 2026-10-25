@@ -58,9 +58,9 @@ fn two_minutes_held_save_otkat1_for_the_bind_day() {
     let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
     ring.hold(Duration::from_secs(120));
 
-    let event = ring.bind();
+    let event = ring.bind(Ring::default_bind());
 
-    let PlashkaEvent::Saved(saved) = &event else {
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
         panic!("expected a saved otkat, got {event:?}");
     };
     assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
@@ -92,9 +92,9 @@ fn a_missing_number_in_the_folder_is_not_reused() {
     let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
     ring.hold(Duration::from_secs(120));
 
-    let event = ring.bind();
+    let event = ring.bind(Ring::default_bind());
 
-    let PlashkaEvent::Saved(saved) = &event else {
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
         panic!("expected a saved otkat, got {event:?}");
     };
     assert_eq!(saved.name(), "otkat4-2026-10-25.mp4");
@@ -114,9 +114,9 @@ fn the_next_number_follows_the_largest_even_past_nine() {
     let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
     ring.hold(Duration::from_secs(120));
 
-    let event = ring.bind();
+    let event = ring.bind(Ring::default_bind());
 
-    let PlashkaEvent::Saved(saved) = &event else {
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
         panic!("expected a saved otkat, got {event:?}");
     };
     assert_eq!(saved.name(), "otkat11-2026-10-25.mp4");
@@ -132,9 +132,9 @@ fn the_otkat_number_does_not_restart_on_a_new_day() {
     let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
     ring.hold(Duration::from_secs(120));
 
-    let event = ring.bind();
+    let event = ring.bind(Ring::default_bind());
 
-    let PlashkaEvent::Saved(saved) = &event else {
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
         panic!("expected a saved otkat, got {event:?}");
     };
     assert_eq!(saved.name(), "otkat6-2026-10-25.mp4");
@@ -155,8 +155,8 @@ fn the_file_keeps_the_bind_day_when_the_write_finishes_after_midnight() {
     });
     ring.hold(Duration::from_secs(120));
 
-    let event = ring.bind();
-    let PlashkaEvent::Saved(saved) = &event else {
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
         panic!("expected a saved otkat, got {event:?}");
     };
     assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
@@ -173,16 +173,16 @@ fn the_ring_keeps_turning_and_the_next_bind_writes_another_file() {
     let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
     ring.hold(Duration::from_secs(120));
 
-    let first = ring.bind();
-    let PlashkaEvent::Saved(saved) = &first else {
+    let first = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &first else {
         panic!("expected a saved otkat, got {first:?}");
     };
     assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
     assert_eq!(saved.duration(), Duration::from_secs(120));
     drop(first);
 
-    let second = ring.bind();
-    let PlashkaEvent::Saved(saved) = &second else {
+    let second = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &second else {
         panic!("expected the ring to still be turning, got {second:?}");
     };
     assert_eq!(saved.name(), "otkat2-2026-10-25.mp4");
@@ -205,8 +205,8 @@ fn a_ring_past_the_chosen_length_saves_ten_minutes() {
     let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
     ring.hold(Duration::from_secs(720));
 
-    let event = ring.bind();
-    let PlashkaEvent::Saved(saved) = &event else {
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
         panic!("expected a saved otkat, got {event:?}");
     };
     assert_eq!(saved.duration(), Duration::from_secs(600));
@@ -226,7 +226,7 @@ fn the_otkat_folder_is_created_when_the_file_is_written() {
     let mut ring = Ring::with_clock(&path, || BindDay::new(2026, 10, 25));
     ring.hold(Duration::from_secs(120));
 
-    let event = ring.bind();
+    let event = ring.bind(Ring::default_bind());
     assert!(
         !path.exists(),
         "the folder appears with the file, after the plashka"
@@ -252,8 +252,8 @@ fn an_empty_ring_does_not_create_the_otkat_folder() {
     let path = parent.path.join("Откаты");
     let mut ring = Ring::new(&path);
 
-    let event = ring.bind();
+    let event = ring.bind(Ring::default_bind());
 
-    assert_eq!(event, PlashkaEvent::NothingToSave);
+    assert_eq!(event, Some(PlashkaEvent::NothingToSave));
     assert!(!path.exists());
 }

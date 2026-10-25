@@ -4,15 +4,20 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// The key combination that asks the ring to save an otkat.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bind {
-    text: &'static str,
+    text: String,
 }
 
 impl Bind {
+    /// A bind written the way a person sets it, for example `Alt+Z`.
+    pub fn new(text: impl Into<String>) -> Self {
+        Self { text: text.into() }
+    }
+
     /// How the bind is written, for example `Alt+Z`.
-    pub fn text(self) -> &'static str {
-        self.text
+    pub fn text(&self) -> &str {
+        &self.text
     }
 }
 
@@ -142,17 +147,19 @@ const CHOSEN_LENGTH: Duration = Duration::from_secs(10 * 60);
 
 /// Encoded seconds the ring holds, and the bind that asks to save an otkat.
 ///
-/// A newly created ring holds no frame.
+/// A newly created ring holds no frame and listens for [`Ring::default_bind`]
+/// until the face hands it a new one.
 pub struct Ring {
     otkat_folder: PathBuf,
     held: Duration,
     clock: Box<dyn Fn() -> BindDay + Send>,
+    bind: Bind,
 }
 
 impl Ring {
     /// The bind a new ring listens for, before anyone changes it.
     pub fn default_bind() -> Bind {
-        Bind { text: "Alt+Z" }
+        Bind::new("Alt+Z")
     }
 
     /// `~/Videos/Откаты`, where otkats are saved until the folder knob changes.
@@ -179,6 +186,7 @@ impl Ring {
             otkat_folder: otkat_folder.into(),
             held: Duration::ZERO,
             clock: Box::new(clock),
+            bind: Self::default_bind(),
         }
     }
 
@@ -189,25 +197,37 @@ impl Ring {
         self.held = held;
     }
 
-    /// The bind was pressed.
+    /// The face hands the ring a new bind.
     ///
-    /// An empty ring answers with [`PlashkaEvent::NothingToSave`] and does not
-    /// create a file in the otkat folder. A ring that holds frames answers with
-    /// [`PlashkaEvent::Saved`]; the file is written when that value is dropped.
-    pub fn bind(&mut self) -> PlashkaEvent {
+    /// The ring saves on that chord, and the previous chord no longer does.
+    /// No Hyprland config is read or written.
+    pub fn take_bind(&mut self, bind: Bind) {
+        self.bind = bind;
+    }
+
+    /// `chord` reached the ring.
+    ///
+    /// When it is not the ring's bind, nothing is saved. When it is, an empty
+    /// ring answers with [`PlashkaEvent::NothingToSave`] and does not create a
+    /// file. A ring that holds frames answers with [`PlashkaEvent::Saved`];
+    /// the file is written when that value is dropped.
+    pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
+        if chord != self.bind {
+            return None;
+        }
         if self.held.is_zero() {
-            return PlashkaEvent::NothingToSave;
+            return Some(PlashkaEvent::NothingToSave);
         }
         let day = (self.clock)();
         let duration = self.held.min(CHOSEN_LENGTH);
         let number = next_otkat_number(&self.otkat_folder);
         let name = format!("otkat{number}-{}.mp4", day.label());
         let path = self.otkat_folder.join(&name);
-        PlashkaEvent::Saved(SavedOtkat {
+        Some(PlashkaEvent::Saved(SavedOtkat {
             name,
             duration,
             pending: Some(PendingOtkat { path, duration }),
-        })
+        }))
     }
 }
 
