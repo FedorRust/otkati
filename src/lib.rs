@@ -1,15 +1,20 @@
 use std::path::PathBuf;
 
 /// The key combination that asks the ring to save an otkat.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bind {
-    text: &'static str,
+    text: String,
 }
 
 impl Bind {
+    /// A bind written the way a person sets it, for example `Alt+Z`.
+    pub fn new(text: impl Into<String>) -> Self {
+        Self { text: text.into() }
+    }
+
     /// How the bind is written, for example `Alt+Z`.
-    pub fn text(self) -> &'static str {
-        self.text
+    pub fn text(&self) -> &str {
+        &self.text
     }
 }
 
@@ -30,7 +35,7 @@ pub struct Ring {
 impl Ring {
     /// The bind a new ring listens for, before anyone changes it.
     pub fn default_bind() -> Bind {
-        Bind { text: "Alt+Z" }
+        Bind::new("Alt+Z")
     }
 
     /// `otkat_folder` is where a saved otkat would be written.
@@ -40,12 +45,16 @@ impl Ring {
         }
     }
 
-    /// The bind was pressed.
+    /// `chord` reached the ring.
     ///
-    /// An empty ring answers with [`PlashkaEvent::NothingToSave`] and does not
-    /// create a file in the otkat folder.
-    pub fn bind(&mut self) -> PlashkaEvent {
+    /// When it is the ring's bind and the ring holds no frame, answers with
+    /// [`PlashkaEvent::NothingToSave`] and does not create a file in the otkat
+    /// folder. Any other chord does not save.
+    pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
+        if chord != Self::default_bind() {
+            return None;
+        }
         let _ = &self.otkat_folder;
-        PlashkaEvent::NothingToSave
+        Some(PlashkaEvent::NothingToSave)
     }
 }
