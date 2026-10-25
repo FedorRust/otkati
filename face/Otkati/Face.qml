@@ -50,6 +50,21 @@ Window {
     readonly property bool settingsVisible: settingsSurface ? settingsSurface.visible : false
     // The bind the face hands to the ring. Alt+Z until the person changes it.
     property string bind: "Alt+Z"
+    // Knobs the face can hand the ring. The microphone stays in the clip
+    // while the ring is on, so there is no microphone-only knob.
+    readonly property var knobNames: [
+        "length",
+        "resolutionShare",
+        "bitrate",
+        "encoder",
+        "ringPlace",
+        "ringMonitor",
+        "bind",
+        "language",
+        "theme",
+        "otkatFolder",
+        "switch"
+    ]
     // Reported by the shell. The program language does not follow either value.
     property string shellLanguage: ""
     property string serpantinumLanguage: ""
