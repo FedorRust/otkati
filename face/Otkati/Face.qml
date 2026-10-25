@@ -56,6 +56,8 @@ Window {
     readonly property var encoderItems: ["H.264", "HEVC", "AV1"]
     // Items the ring says this card can do. H.264 until the ring says otherwise.
     property var offeredEncoders: ["H.264"]
+    // The length, in seconds, the face hands to the ring. Ten minutes until the person changes it.
+    property int length: 600
     // The switch the face hands to the ring. On until the person turns the ring off.
     property bool ringOn: true
     // Reported by the shell. The program language does not follow either value.
@@ -231,6 +233,12 @@ Window {
 
     function setBind(chord) {
         bind = chord
+    }
+
+    function setLength(seconds) {
+        if (!Number.isInteger(seconds) || seconds < 15 || seconds > 1200)
+            return
+        length = seconds
     }
 
     function setSwitch(gathering) {
