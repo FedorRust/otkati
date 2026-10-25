@@ -31,4 +31,14 @@ TestCase {
         compare(face.themeColor, "#aabbcc")
         compare(face.plashkaColor, "#ff0000")
     }
+
+    function test_empty_ring_plashka_leaves_after_about_two_seconds() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.showPlashka(Face.PlashkaEvent.NothingToSave)
+        compare(face.visible, true)
+        wait(1500)
+        compare(face.visible, true)
+        tryCompare(face, "visible", false, 1200)
+    }
 }

@@ -24,6 +24,13 @@ Window {
             return
         label.text = "Nothing to save"
         visible = true
+        hideTimer.restart()
+    }
+
+    Timer {
+        id: hideTimer
+        interval: 2000
+        onTriggered: root.visible = false
     }
 
     Rectangle {
