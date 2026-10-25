@@ -17,7 +17,8 @@ Window {
         Ordinary,
         Saved,
         ClipNotSaved,
-        NoAccess
+        NoAccess,
+        FolderNotCreated
     }
 
     readonly property var colorKeys: [
@@ -330,6 +331,7 @@ Window {
         return event === Face.PlashkaEvent.Ordinary
                 || event === Face.PlashkaEvent.Saved
                 || event === Face.PlashkaEvent.NoAccess
+                || event === Face.PlashkaEvent.FolderNotCreated
     }
 
     function showPlashka(event) {
