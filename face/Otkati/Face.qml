@@ -9,7 +9,8 @@ Window {
     flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
 
     enum PlashkaEvent {
-        NothingToSave
+        NothingToSave,
+        ClipNotSaved
     }
 
     property color themeColor: "#000000"
@@ -17,6 +18,7 @@ Window {
     // Reported by the shell. The program language does not follow either value.
     property string shellLanguage: ""
     property string serpantinumLanguage: ""
+    property int plashkaEvent: -1
     readonly property alias plashkaText: label.text
     readonly property alias plashkaColor: background.color
 
@@ -26,8 +28,11 @@ Window {
 
     function setLanguage(next) {
         language = next
-        if (visible)
-            label.text = nothingToSaveText()
+        if (!visible)
+            return
+        const text = plashkaPhrase(plashkaEvent)
+        if (text !== "")
+            label.text = text
     }
 
     function setShellLanguage(next) {
@@ -38,10 +43,12 @@ Window {
         serpantinumLanguage = next
     }
 
-    function nothingToSaveText() {
-        if (language === "ru")
-            return "Сохранять нечего"
-        return "Nothing to save"
+    function plashkaPhrase(event) {
+        if (event === Face.PlashkaEvent.NothingToSave)
+            return language === "ru" ? "Сохранять нечего" : "Nothing to save"
+        if (event === Face.PlashkaEvent.ClipNotSaved)
+            return language === "ru" ? "Откат не сохранился" : "Couldn't save the clip"
+        return ""
     }
 
     function settingLabel(key) {
@@ -117,9 +124,11 @@ Window {
     }
 
     function showPlashka(event) {
-        if (event !== Face.PlashkaEvent.NothingToSave)
+        const text = plashkaPhrase(event)
+        if (text === "")
             return
-        label.text = nothingToSaveText()
+        plashkaEvent = event
+        label.text = text
         visible = true
         hideTimer.restart()
     }
