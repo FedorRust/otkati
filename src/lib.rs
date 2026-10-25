@@ -290,9 +290,7 @@ impl PendingOtkat {
             .arg("-pix_fmt")
             .arg("yuv420p");
         if self.bitrate_mbps > 0 {
-            command
-                .arg("-b:v")
-                .arg(format!("{}M", self.bitrate_mbps));
+            command.arg("-b:v").arg(format!("{}M", self.bitrate_mbps));
         }
         if with_sound {
             command.arg("-c:a").arg("aac");
@@ -537,10 +535,7 @@ impl Ring {
         let number = next_otkat_number(&self.otkat_folder);
         let name = format!("otkat{number}-{}.mp4", day.label());
         let path = self.otkat_folder.join(&name);
-        let monitor = self
-            .segment
-            .as_ref()
-            .map(|segment| segment.monitor.clone());
+        let monitor = self.segment.as_ref().map(|segment| segment.monitor.clone());
         let live = monitor.is_some();
         let cursor_in_picture = live;
         let output_sound = live;

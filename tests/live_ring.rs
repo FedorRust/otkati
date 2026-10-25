@@ -4,7 +4,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use otkati::{Encoder, MonitorMoment, PlashkaEvent, Ring, RingPlace, Screen};
+use otkati::{BindDay, Encoder, MonitorMoment, PlashkaEvent, Ring, RingPlace, Screen};
 
 struct OtkatFolder {
     path: PathBuf,
@@ -39,9 +39,7 @@ fn after_the_screen_answer_the_chosen_monitor_enters_the_ring() {
 
     ring.take_monitor(MonitorMoment::new(screen.clone(), Duration::from_secs(2)));
 
-    let segment = ring
-        .segment()
-        .expect("the chosen monitor entered the ring");
+    let segment = ring.segment().expect("the chosen monitor entered the ring");
     assert_eq!(segment.monitor(), &screen);
     assert_eq!(segment.duration(), Duration::from_secs(2));
     let written: Vec<_> = fs::read_dir(&folder.path).unwrap().collect();
@@ -199,9 +197,7 @@ fn the_ring_keeps_an_encoded_segment_not_raw_frames() {
     let folder = OtkatFolder::new();
     let screen = Screen::new("Alexey's screen");
     let mut ring = Ring::enter_session(folder.path.clone(), Some(screen.clone()));
-    ring.take_monitor(
-        MonitorMoment::new(screen, Duration::from_secs(2)).unique_frames(120),
-    );
+    ring.take_monitor(MonitorMoment::new(screen, Duration::from_secs(2)).unique_frames(120));
 
     let segment = ring.segment().expect("the ring is holding its monitor");
     assert!(segment.is_encoded());
@@ -304,4 +300,58 @@ fn until_the_knobs_change_the_ring_uses_memory_h264_full_sides_and_25_mbit() {
         written.is_empty(),
         "the encoded ring stays in memory, not in the otkat folder"
     );
+}
+
+#[test]
+fn a_bind_on_the_live_ring_saves_the_same_name_file_and_plashka() {
+    let folder = OtkatFolder::new();
+    let screen = Screen::new("Alexey's screen");
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.remember_screen(screen.clone());
+    ring.take_monitor(MonitorMoment::new(screen, Duration::from_secs(120)));
+
+    let event = ring.bind(Ring::default_bind());
+
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
+    assert_eq!(saved.duration(), Duration::from_secs(120));
+    let path = folder.path.join("otkat1-2026-10-25.mp4");
+    assert!(
+        !path.exists(),
+        "the success plashka comes out before the file is in the folder"
+    );
+    drop(event);
+
+    assert_eq!(mp4_duration_secs(&path), 120);
+    let names: Vec<_> = fs::read_dir(&folder.path)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(
+        names,
+        vec![std::ffi::OsString::from("otkat1-2026-10-25.mp4")]
+    );
+}
+
+fn mp4_duration_secs(path: &Path) -> u64 {
+    let output = Command::new("ffprobe")
+        .arg("-v")
+        .arg("error")
+        .arg("-show_entries")
+        .arg("format=duration")
+        .arg("-of")
+        .arg("default=nw=1:nk=1")
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "ffprobe failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8(output.stdout).unwrap();
+    let secs: f64 = text.trim().parse().unwrap();
+    secs.round() as u64
 }
