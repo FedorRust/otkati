@@ -39,6 +39,32 @@ impl BindDay {
     }
 }
 
+/// Percent of each side of the ring monitor's frame.
+///
+/// The face hands this to the ring. One hundred keeps the whole monitor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResolutionShare {
+    percent: u8,
+}
+
+impl ResolutionShare {
+    /// `percent` of each side. The ring starts at 100.
+    pub fn new(percent: u8) -> Self {
+        Self { percent }
+    }
+
+    /// The percent of each side.
+    pub fn percent(self) -> u8 {
+        self.percent
+    }
+}
+
+impl Default for ResolutionShare {
+    fn default() -> Self {
+        Self { percent: 100 }
+    }
+}
+
 /// A screen the person can give the program.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Screen {
@@ -228,6 +254,7 @@ pub struct Ring {
     waiting_for_screen: bool,
     screen: Option<Screen>,
     bind: Bind,
+    resolution_share: ResolutionShare,
 }
 
 impl Ring {
@@ -263,6 +290,7 @@ impl Ring {
             waiting_for_screen: false,
             screen: None,
             bind: Self::default_bind(),
+            resolution_share: ResolutionShare::default(),
         }
     }
 
@@ -282,6 +310,7 @@ impl Ring {
             waiting_for_screen,
             screen: remembered,
             bind: Self::default_bind(),
+            resolution_share: ResolutionShare::default(),
         }
     }
 
@@ -329,6 +358,13 @@ impl Ring {
         self.bind = bind;
     }
 
+    /// The face hands the ring a new resolution share.
+    ///
+    /// Each side of the next otkat is this percent of the ring monitor.
+    pub fn take_resolution_share(&mut self, share: ResolutionShare) {
+        self.resolution_share = share;
+    }
+
     /// `chord` reached the ring.
     ///
     /// When it is not the ring's bind, nothing is saved. When the session is
@@ -356,6 +392,10 @@ impl Ring {
             .screen
             .as_ref()
             .and_then(Screen::frame)
+            .map(|(width, height)| {
+                let percent = u32::from(self.resolution_share.percent());
+                (width * percent / 100, height * percent / 100)
+            })
             .unwrap_or(STAND_IN_FRAME);
         let bitrate_mbit = PICTURE_BITRATE_MBIT;
         Some(PlashkaEvent::Saved(SavedOtkat {

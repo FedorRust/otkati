@@ -4,7 +4,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use otkati::{BindDay, PlashkaEvent, Ring, Screen};
+use otkati::{BindDay, PlashkaEvent, ResolutionShare, Ring, Screen};
 
 struct OtkatFolder {
     path: PathBuf,
@@ -76,4 +76,28 @@ fn a_new_ring_saves_the_whole_monitor_at_25_mbit() {
     let path = folder.path.join(saved.name());
     drop(saved);
     assert_eq!(mp4_frame(&path), (1920, 1080));
+}
+
+#[test]
+fn the_share_applies_to_each_side_of_the_monitor() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.remember_screen(Screen::with_frame("desk", 1920, 1080));
+    ring.hold(Duration::from_secs(1));
+
+    ring.take_resolution_share(ResolutionShare::new(50));
+    let half = saved_otkat(&mut ring);
+    assert_eq!(half.width(), 960);
+    assert_eq!(half.height(), 540);
+    let half_path = folder.path.join(half.name());
+    drop(half);
+    assert_eq!(mp4_frame(&half_path), (960, 540));
+
+    ring.take_resolution_share(ResolutionShare::new(70));
+    let seventy = saved_otkat(&mut ring);
+    assert_eq!(seventy.width(), 1344);
+    assert_eq!(seventy.height(), 756);
+    let seventy_path = folder.path.join(seventy.name());
+    drop(seventy);
+    assert_eq!(mp4_frame(&seventy_path), (1344, 756));
 }
