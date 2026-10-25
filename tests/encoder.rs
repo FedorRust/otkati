@@ -1,9 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use otkati::{Card, Encoder, Ring};
+use otkati::{BindDay, Card, Encoder, PlashkaEvent, Ring};
 
 struct OtkatFolder {
     path: PathBuf,
@@ -54,4 +54,23 @@ fn a_3060_ti_offers_h264_and_hevc_and_still_chooses_h264() {
         ring.offered_encoders(),
         vec![Encoder::H264, Encoder::Hevc]
     );
+}
+
+#[test]
+fn switching_to_hevc_on_a_3060_ti_keeps_the_mp4_name() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.see_card(Card::Nvidia3060Ti);
+    ring.hold(Duration::from_secs(1));
+
+    ring.take_encoder(Encoder::Hevc);
+
+    assert_eq!(ring.encoder(), Encoder::Hevc);
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
+    drop(event);
+    assert!(folder.path.join("otkat1-2026-10-25.mp4").is_file());
 }

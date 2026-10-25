@@ -204,6 +204,7 @@ pub struct Ring {
     screen: Option<Screen>,
     bind: Bind,
     card: Option<Card>,
+    encoder: Encoder,
 }
 
 impl Ring {
@@ -240,6 +241,7 @@ impl Ring {
             screen: None,
             bind: Self::default_bind(),
             card: None,
+            encoder: Encoder::H264,
         }
     }
 
@@ -260,6 +262,7 @@ impl Ring {
             screen: remembered,
             bind: Self::default_bind(),
             card: None,
+            encoder: Encoder::H264,
         }
     }
 
@@ -288,7 +291,12 @@ impl Ring {
 
     /// The encoder the ring is using. A new machine uses H.264.
     pub fn encoder(&self) -> Encoder {
-        Encoder::H264
+        self.encoder
+    }
+
+    /// The face hands the ring an encoder item.
+    pub fn take_encoder(&mut self, encoder: Encoder) {
+        self.encoder = encoder;
     }
 
     /// The card on this machine. The chosen encoder stays as it is.
