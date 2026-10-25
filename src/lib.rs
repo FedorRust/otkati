@@ -3,6 +3,15 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+/// Where the encoded ring lies until an otkat is saved from it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RingPlace {
+    /// The ring stays in memory. This is the place until the person chooses disk.
+    Memory,
+    /// The encoded ring lies in the ring folder.
+    Disk,
+}
+
 /// The key combination that asks the ring to save an otkat.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bind {
@@ -152,6 +161,8 @@ pub enum PlashkaEvent {
     Saved(SavedOtkat),
     /// The person has not answered which screen the program may see.
     NoAccess,
+    /// The otkat folder could not be created, so there is no file.
+    FolderNotCreated,
     /// The ring is off, so the bind saves nothing.
     RingOff,
 }
@@ -161,6 +172,7 @@ impl PartialEq for PlashkaEvent {
         match (self, other) {
             (Self::NothingToSave, Self::NothingToSave) => true,
             (Self::NoAccess, Self::NoAccess) => true,
+            (Self::FolderNotCreated, Self::FolderNotCreated) => true,
             (Self::RingOff, Self::RingOff) => true,
             (Self::Saved(left), Self::Saved(right)) => {
                 left.name == right.name && left.duration == right.duration
@@ -353,6 +365,8 @@ pub struct Ring {
     screen: Option<Screen>,
     segment: Option<EncodedSegment>,
     bind: Bind,
+    ring_place: RingPlace,
+    ring_folder: PathBuf,
     switch: Switch,
 }
 
@@ -372,9 +386,54 @@ impl Ring {
         folder
     }
 
+    /// `~/.local/state/otkati/ring`, where the encoded ring lies when the place is disk.
+    pub fn default_ring_folder() -> PathBuf {
+        ring_folder_under(&home_dir())
+    }
+
     /// `otkat_folder` is where a saved otkat is written.
     pub fn new(otkat_folder: impl Into<PathBuf>) -> Self {
         Self::with_clock(otkat_folder, system_bind_day)
+    }
+
+    /// `home` roots the ring folder `home/.local/state/otkati/ring`.
+    /// [`Ring::new`] uses the process home. A new ring stays in memory.
+    pub fn with_home(otkat_folder: impl Into<PathBuf>, home: impl Into<PathBuf>) -> Self {
+        let mut ring = Self::new(otkat_folder);
+        ring.ring_folder = ring_folder_under(&home.into());
+        ring
+    }
+
+    /// Where the encoded ring lies. A new ring is in memory.
+    pub fn place(&self) -> RingPlace {
+        self.ring_place
+    }
+
+    /// The folder that holds the encoded ring when the place is disk.
+    pub fn ring_folder(&self) -> Option<&Path> {
+        match self.ring_place {
+            RingPlace::Memory => None,
+            RingPlace::Disk => Some(&self.ring_folder),
+        }
+    }
+
+    /// The face hands the ring a place.
+    ///
+    /// A different place starts the ring over: minutes already held are
+    /// dropped and nothing is written to the otkat folder. The same place
+    /// leaves those minutes. Disk puts the encoded ring in the ring folder
+    /// and creates that folder.
+    pub fn take_place(&mut self, place: RingPlace) {
+        if self.ring_place == place {
+            return;
+        }
+        self.held = Duration::ZERO;
+        self.ring_place = place;
+        if place == RingPlace::Disk {
+            if let Err(err) = fs::create_dir_all(&self.ring_folder) {
+                eprintln!("ring folder was not created: {err}");
+            }
+        }
     }
 
     /// `clock` answers the bind day. [`Ring::new`] uses the local calendar day.
@@ -391,6 +450,8 @@ impl Ring {
             screen: None,
             segment: None,
             bind: Self::default_bind(),
+            ring_place: RingPlace::Memory,
+            ring_folder: ring_folder_under(&home_dir()),
             switch: Switch::On,
         }
     }
@@ -413,6 +474,8 @@ impl Ring {
             screen: remembered,
             segment: None,
             bind: Self::default_bind(),
+            ring_place: RingPlace::Memory,
+            ring_folder: ring_folder_under(&home_dir()),
             switch: Switch::On,
         }
     }
@@ -564,15 +627,25 @@ impl Ring {
         self.bind = bind;
     }
 
+    /// The face hands the ring a new otkat folder.
+    ///
+    /// The next otkat is written there. Files already in the previous folder
+    /// stay where they are.
+    pub fn take_otkat_folder(&mut self, folder: impl Into<PathBuf>) {
+        self.otkat_folder = folder.into();
+    }
+
     /// `chord` reached the ring.
     ///
     /// When it is not the ring's bind, nothing is saved. When the ring is off,
     /// answers with [`PlashkaEvent::RingOff`]. When the session is still
     /// waiting for the person's screen, answers with
     /// [`PlashkaEvent::NoAccess`]. When the ring holds no frame, answers with
-    /// [`PlashkaEvent::NothingToSave`]. None of those creates a file.
-    /// A ring that holds frames answers with [`PlashkaEvent::Saved`]; the file
-    /// is written when that value is dropped.
+    /// [`PlashkaEvent::NothingToSave`]. When the otkat folder cannot be
+    /// created, answers with [`PlashkaEvent::FolderNotCreated`]. None of those
+    /// creates a file. A ring that holds frames and can use the folder answers
+    /// with [`PlashkaEvent::Saved`]; the file is written when that value is
+    /// dropped.
     pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
         if chord != self.bind {
             return None;
@@ -585,6 +658,9 @@ impl Ring {
         }
         if self.held.is_zero() {
             return Some(PlashkaEvent::NothingToSave);
+        }
+        if !otkat_folder_can_be_created(&self.otkat_folder) {
+            return Some(PlashkaEvent::FolderNotCreated);
         }
         let day = (self.clock)();
         let duration = self.held.min(self.chosen_length);
@@ -618,6 +694,52 @@ impl Ring {
             frames_per_second,
         }))
     }
+}
+
+fn home_dir() -> PathBuf {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn ring_folder_under(home: &Path) -> PathBuf {
+    home.join(".local/state/otkati/ring")
+}
+
+/// The folder is created with the file, after the plashka, so this only looks.
+fn otkat_folder_can_be_created(folder: &Path) -> bool {
+    if folder.is_dir() {
+        return true;
+    }
+    if folder.exists() {
+        return false;
+    }
+    let mut ancestor = folder;
+    loop {
+        let Some(parent) = ancestor.parent() else {
+            return false;
+        };
+        if parent == ancestor {
+            return false;
+        }
+        if parent.exists() {
+            return parent.is_dir() && directory_accepts_a_child(parent);
+        }
+        ancestor = parent;
+    }
+}
+
+fn directory_accepts_a_child(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    extern "C" {
+        fn access(pathname: *const std::os::raw::c_char, mode: i32) -> i32;
+    }
+    const W_OK: i32 = 2;
+    const X_OK: i32 = 1;
+    unsafe { access(c_path.as_ptr(), W_OK | X_OK) == 0 }
 }
 
 fn next_otkat_number(folder: &Path) -> u32 {
