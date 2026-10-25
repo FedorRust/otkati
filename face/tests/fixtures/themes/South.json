@@ -1,0 +1,27 @@
+{
+  "name": "South",
+  "colors": {
+    "base": "#202020",
+    "mantle": "#202122",
+    "crust": "#202123",
+    "text": "#d0d0e0",
+    "subtext0": "#d0d0e1",
+    "subtext1": "#d0d0e2",
+    "surface0": "#303030",
+    "surface1": "#303131",
+    "surface2": "#303132",
+    "overlay0": "#404040",
+    "overlay1": "#404141",
+    "overlay2": "#404142",
+    "blue": "#0000bb",
+    "sapphire": "#0000bc",
+    "peach": "#bb4400",
+    "green": "#00bb44",
+    "red": "#bb0044",
+    "mauve": "#8800bb",
+    "pink": "#bb0088",
+    "yellow": "#bbbb00",
+    "maroon": "#bb2244",
+    "teal": "#00bbbb"
+  }
+}

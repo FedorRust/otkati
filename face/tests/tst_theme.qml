@@ -148,4 +148,50 @@ TestCase {
         compare(again.themeColors.text, "#abcabc")
         compare(again.themeColors.blue, "#445566")
     }
+
+    function test_a_person_chooses_another_ready_made_theme_and_the_face_remembers_it() {
+        const store = freshStore()
+        const face = faceOn("shell-north.json", store)
+        compare(face.readyThemes.join(","), "Matugen,North,South")
+
+        face.setTheme("#ff00ff")
+        compare(face.themeColor, "#ff00ff")
+        compare(face.themeName, "North")
+        compare(face.settingsColor, "#101418")
+
+        face.setTheme("Not a theme")
+        compare(face.themeName, "North")
+
+        face.setTheme("South")
+        compare(face.themeName, "South")
+        compare(face.settingsColor, "#202020")
+        compare(face.themeColors.base, "#202020")
+        compare(face.themeColors.mantle, "#202122")
+        compare(face.themeColors.crust, "#202123")
+        compare(face.themeColors.text, "#d0d0e0")
+        compare(face.themeColors.subtext0, "#d0d0e1")
+        compare(face.themeColors.subtext1, "#d0d0e2")
+        compare(face.themeColors.surface0, "#303030")
+        compare(face.themeColors.surface1, "#303131")
+        compare(face.themeColors.surface2, "#303132")
+        compare(face.themeColors.overlay0, "#404040")
+        compare(face.themeColors.overlay1, "#404141")
+        compare(face.themeColors.overlay2, "#404142")
+        compare(face.themeColors.blue, "#0000bb")
+        compare(face.themeColors.sapphire, "#0000bc")
+        compare(face.themeColors.peach, "#bb4400")
+        compare(face.themeColors.green, "#00bb44")
+        compare(face.themeColors.red, "#bb0044")
+        compare(face.themeColors.mauve, "#8800bb")
+        compare(face.themeColors.pink, "#bb0088")
+        compare(face.themeColors.yellow, "#bbbb00")
+        compare(face.themeColors.maroon, "#bb2244")
+        compare(face.themeColors.teal, "#00bbbb")
+
+        const again = faceOn("shell-north.json", store)
+        compare(again.themeName, "South")
+        compare(again.settingsColor, "#202020")
+        compare(again.themeColors.text, "#d0d0e0")
+        compare(again.themeColors.blue, "#0000bb")
+    }
 }

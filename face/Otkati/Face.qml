@@ -28,14 +28,50 @@ Window {
     property string themeStorePath: ""
     property string themeName: ""
     property var themeColors: ({})
+    property var readyThemes: []
+    property var themeByName: ({})
     property var settingsSurface: null
     readonly property color settingsColor: settingsSurface ? settingsSurface.color : "transparent"
     readonly property bool settingsVisible: settingsSurface ? settingsSurface.visible : false
     readonly property alias plashkaText: label.text
     readonly property alias plashkaColor: background.color
 
-    function setTheme(color) {
-        themeColor = color
+    function setTheme(next) {
+        if (typeof next === "string" && next.charAt(0) === "#") {
+            themeColor = next
+            return
+        }
+        if (!hasReadyTheme(next))
+            return
+        const colors = colorsFrom(readJson(themeByName[next]))
+        if (!colors)
+            return
+        applyTheme(next, colors)
+        rememberTheme()
+    }
+
+    function hasReadyTheme(name) {
+        for (let i = 0; i < readyThemes.length; i++) {
+            if (readyThemes[i] === name)
+                return true
+        }
+        return false
+    }
+
+    function loadCatalogue() {
+        const paths = Files.jsonFiles(cataloguePath)
+        const names = []
+        const byName = {}
+        for (let i = 0; i < paths.length; i++) {
+            const data = readJson(paths[i])
+            if (!data || typeof data.name !== "string" || data.name.length === 0)
+                continue
+            names.push(data.name)
+            byName[data.name] = paths[i]
+        }
+        names.sort()
+        readyThemes = names
+        themeByName = byName
     }
 
     function colorSet(source) {
@@ -96,6 +132,7 @@ Window {
     }
 
     function openSettings() {
+        loadCatalogue()
         const stored = storedTheme()
         if (stored) {
             applyTheme(stored.name, stored.colors)
