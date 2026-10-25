@@ -52,6 +52,43 @@ Window {
     property var readyThemes: []
     property var themeByName: ({})
     property var settingsSurface: null
+    property var firstLaunchOverlay: null
+    property bool firstLaunchPlayed: false
+    // Connected monitors. The overlay covers only the ring monitor.
+    property var monitors: []
+    readonly property bool firstLaunchVisible: firstLaunchOverlay !== null && firstLaunchOverlay.visible
+    readonly property string firstLaunchMonitor: firstLaunchOverlay ? firstLaunchOverlay.monitorName : ""
+    readonly property int firstLaunchWidth: firstLaunchOverlay ? firstLaunchOverlay.width : 0
+    readonly property int firstLaunchHeight: firstLaunchOverlay ? firstLaunchOverlay.height : 0
+    readonly property bool firstLaunchFullScreen: firstLaunchOverlay !== null
+            && firstLaunchOverlay.coversMonitor
+            && firstLaunchOverlay.width === firstLaunchOverlay.monitorWidth
+            && firstLaunchOverlay.height === firstLaunchOverlay.monitorHeight
+    readonly property string firstLaunchStep: firstLaunchOverlay ? firstLaunchOverlay.step : ""
+    readonly property real screenWipe: firstLaunchOverlay ? firstLaunchOverlay.wipe : 0
+    readonly property real screenWipeWidth: firstLaunchOverlay ? firstLaunchOverlay.screenWipeWidth : 0
+    readonly property var firstLaunchLines: language === "ru" ? [
+        "Добро пожаловать",
+        "Последние минуты уже пишутся.",
+        "Alt+Z сохраняет откат.",
+        "FedorRust"
+    ] : [
+        "Welcome",
+        "The last minutes are already kept.",
+        "Alt+Z saves a clip.",
+        "FedorRust"
+    ]
+    readonly property string firstLaunchButton: firstLaunchOverlay ? firstLaunchOverlay.buttonText : ""
+    readonly property var typedLines: firstLaunchOverlay ? firstLaunchOverlay.typedLines : []
+    readonly property color penguinOutlineColor: firstLaunchOverlay ? firstLaunchOverlay.outlineColor : "transparent"
+    readonly property color penguinFillColor: firstLaunchOverlay ? firstLaunchOverlay.fillColor : "transparent"
+    readonly property color screenWipeColor: firstLaunchOverlay ? firstLaunchOverlay.wipeColor : "transparent"
+    readonly property color firstLaunchTextColor: firstLaunchOverlay ? firstLaunchOverlay.lineColor : "transparent"
+    readonly property color firstLaunchButtonColor: firstLaunchOverlay ? firstLaunchOverlay.lineColor : "transparent"
+    readonly property real penguinFillLevel: firstLaunchOverlay ? firstLaunchOverlay.fillLevel : 0
+    readonly property real penguinFillTop: firstLaunchOverlay ? firstLaunchOverlay.penguinFillTop : 0
+    readonly property real penguinFillHeight: firstLaunchOverlay ? firstLaunchOverlay.penguinFillHeight : 0
+    readonly property real penguinHeight: firstLaunchOverlay ? firstLaunchOverlay.penguinHeight : 0
     readonly property color settingsColor: settingsSurface ? settingsSurface.color : "transparent"
     readonly property color settingsTextColor: settingsSurface ? settingsSurface.ink : "transparent"
     readonly property bool settingsVisible: settingsSurface ? settingsSurface.visible : false
@@ -216,6 +253,83 @@ Window {
         settingsSurface.visible = true
     }
 
+    function ringMonitorGeometry() {
+        for (let i = 0; i < monitors.length; i++) {
+            if (!ringMonitor || monitors[i].name === ringMonitor)
+                return monitors[i]
+        }
+        return {
+            name: ringMonitor || Screen.name,
+            width: Screen.width,
+            height: Screen.height
+        }
+    }
+
+    function screenNamed(name) {
+        const screens = Qt.application.screens
+        for (let i = 0; i < screens.length; i++) {
+            if (screens[i].name === name)
+                return screens[i]
+        }
+        return null
+    }
+
+    function playFirstLaunch() {
+        if (firstLaunchPlayed)
+            return
+        firstLaunchPlayed = true
+        rememberTheme()
+        if (firstLaunchOverlay)
+            return
+        const monitor = ringMonitorGeometry()
+        const overlay = firstLaunchComponent.createObject(null, {
+            monitorName: monitor.name,
+            monitorWidth: monitor.width,
+            monitorHeight: monitor.height,
+            width: monitor.width,
+            height: monitor.height,
+            coversMonitor: true,
+            lines: Qt.binding(function() { return root.firstLaunchLines }),
+            wipeColor: Qt.binding(function() { return root.themeColors.base }),
+            lineColor: Qt.binding(function() { return root.themeColors.text }),
+            outlineColor: Qt.binding(function() { return root.themeColors.text }),
+            fillColor: Qt.binding(function() { return root.themeColors.blue }),
+            buttonText: Qt.binding(function() { return root.language === "ru" ? "Дальше" : "Continue" })
+        })
+        if (!overlay)
+            return
+        const screen = screenNamed(monitor.name)
+        if (screen) {
+            overlay.screen = screen
+            overlay.visibility = Window.FullScreen
+            if (overlay.width !== monitor.width || overlay.height !== monitor.height) {
+                overlay.visibility = Window.Windowed
+                overlay.width = monitor.width
+                overlay.height = monitor.height
+            }
+        }
+        overlay.continued.connect(continueFirstLaunch)
+        overlay.escaped.connect(escapeFirstLaunch)
+        firstLaunchOverlay = overlay
+    }
+
+    function overlayCovers(name) {
+        return firstLaunchVisible && firstLaunchMonitor === name
+    }
+
+    function continueFirstLaunch() {
+        dismissFirstLaunch()
+    }
+
+    function escapeFirstLaunch() {
+        dismissFirstLaunch()
+    }
+
+    function dismissFirstLaunch() {
+        if (firstLaunchOverlay)
+            firstLaunchOverlay.visible = false
+    }
+
     function storedTheme() {
         const stored = readJson(themeStorePath)
         if (!stored || !stored.name)
@@ -223,16 +337,21 @@ Window {
         const colors = colorSet(stored.colors)
         if (!colors)
             return null
+        if (stored.firstLaunch === true)
+            firstLaunchPlayed = true
         return { name: stored.name, colors: colors }
     }
 
     function rememberTheme() {
         if (!themeStorePath || !themeName)
             return
-        Files.writeText(themeStorePath, JSON.stringify({
+        const payload = {
             name: themeName,
             colors: themeColors
-        }))
+        }
+        if (firstLaunchPlayed)
+            payload.firstLaunch = true
+        Files.writeText(themeStorePath, JSON.stringify(payload))
     }
 
     function openSettings() {
@@ -240,6 +359,7 @@ Window {
         const stored = storedTheme()
         if (stored) {
             applyTheme(stored.name, stored.colors)
+            playFirstLaunch()
             return
         }
         let settings
@@ -255,6 +375,7 @@ Window {
             return
         applyTheme(matugen ? (theme.activePreset || "Matugen") : (theme.activePreset || ""), colors)
         rememberTheme()
+        playFirstLaunch()
     }
 
     function isMatugen(theme) {
@@ -271,6 +392,8 @@ Window {
     Component.onDestruction: {
         if (settingsSurface)
             settingsSurface.destroy()
+        if (firstLaunchOverlay)
+            firstLaunchOverlay.destroy()
     }
 
     function setLanguage(next) {
@@ -498,6 +621,11 @@ Window {
                 color: ink
             }
         }
+    }
+
+    Component {
+        id: firstLaunchComponent
+        FirstLaunch {}
     }
 
     Rectangle {
