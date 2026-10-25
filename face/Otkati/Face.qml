@@ -16,7 +16,6 @@ Window {
         ClipDidNotSave,
         Ordinary,
         Saved,
-        ClipNotSaved,
         NoAccess,
         FolderNotCreated,
         RingOff
@@ -67,15 +66,61 @@ Window {
     readonly property string firstLaunchStep: firstLaunchOverlay ? firstLaunchOverlay.step : ""
     readonly property real screenWipe: firstLaunchOverlay ? firstLaunchOverlay.wipe : 0
     readonly property real screenWipeWidth: firstLaunchOverlay ? firstLaunchOverlay.screenWipeWidth : 0
-    readonly property var firstLaunchLines: language === "ru" ? [
-        "Добро пожаловать",
-        "Последние минуты уже пишутся.",
-        "Alt+Z сохраняет откат.",
-        "FedorRust"
-    ] : [
-        "Welcome",
-        "The last minutes are already kept.",
-        "Alt+Z saves a clip.",
+    readonly property var wordsByLanguage: ({
+        en: {
+            length: "Length",
+            resolutionShare: "Resolution share",
+            bitrate: "Bitrate",
+            encoder: "Encoder",
+            h264: "NVIDIA, AMD, Intel, and machines with no hardware encoder",
+            hevc: "NVIDIA, including the 3060 Ti and 3070 Ti, and AMD or Intel when the card can do HEVC",
+            av1: "NVIDIA from the 40 series and AMD from the RX 7000",
+            ringPlace: "Ring place",
+            ringMonitor: "Ring monitor",
+            bind: "Bind",
+            language: "Language",
+            theme: "Theme",
+            otkatFolder: "Otkat folder",
+            switch: "Switch",
+            english: "English",
+            russian: "Russian",
+            nothingToSave: "Nothing to save",
+            clipDidNotSave: "Couldn't save the clip",
+            continueButton: "Continue",
+            welcome: "Welcome",
+            kept: "The last minutes are already kept.",
+            bindSaves: "Alt+Z saves a clip."
+        },
+        ru: {
+            length: "Длина",
+            resolutionShare: "Доля разрешения",
+            bitrate: "Битрейт",
+            encoder: "Кодировщик",
+            h264: "NVIDIA, AMD, Intel и компьютеры без аппаратного кодировщика",
+            hevc: "NVIDIA, включая 3060 Ti и 3070 Ti, и AMD или Intel, если карта умеет HEVC",
+            av1: "NVIDIA с 40-й серии и AMD с RX 7000",
+            ringPlace: "Место кольца",
+            ringMonitor: "Монитор кольца",
+            bind: "Бинд",
+            language: "Язык",
+            theme: "Тема",
+            otkatFolder: "Папка откатов",
+            switch: "Выключатель",
+            english: "Английский",
+            russian: "Русский",
+            nothingToSave: "Сохранять нечего",
+            clipDidNotSave: "Откат не сохранился",
+            continueButton: "Дальше",
+            welcome: "Добро пожаловать",
+            kept: "Последние минуты уже пишутся.",
+            bindSaves: "Alt+Z сохраняет откат."
+        }
+    })
+    readonly property var words: wordsByLanguage[language] || wordsByLanguage.en
+    readonly property var firstLaunchLines: [
+        words.welcome,
+        words.kept,
+        words.bindSaves,
         "FedorRust"
     ]
     readonly property string firstLaunchButton: firstLaunchOverlay ? firstLaunchOverlay.buttonText : ""
@@ -162,10 +207,8 @@ Window {
     }
 
     function setTheme(next) {
-        if (typeof next === "string" && next.charAt(0) === "#") {
-            themeColor = next
+        if (typeof next !== "string" || next.charAt(0) === "#")
             return
-        }
         if (!hasReadyTheme(next))
             return
         const data = readJson(themeByName[next])
@@ -254,14 +297,40 @@ Window {
     }
 
     function ringMonitorGeometry() {
+        if (!ringMonitor) {
+            if (monitors.length > 0)
+                return null
+            return {
+                name: Screen.name,
+                width: Screen.width,
+                height: Screen.height
+            }
+        }
         for (let i = 0; i < monitors.length; i++) {
-            if (!ringMonitor || monitors[i].name === ringMonitor)
+            if (monitors[i].name === ringMonitor)
                 return monitors[i]
         }
+        if (monitors.length > 0)
+            return null
         return {
-            name: ringMonitor || Screen.name,
+            name: ringMonitor,
             width: Screen.width,
             height: Screen.height
+        }
+    }
+
+    function placeOnRingMonitor() {
+        if (!ringMonitor)
+            return
+        for (let i = 0; i < monitors.length; i++) {
+            const monitor = monitors[i]
+            if (monitor.name !== ringMonitor)
+                continue
+            if (monitor.x === undefined || monitor.y === undefined)
+                return
+            x = monitor.x
+            y = monitor.y
+            return
         }
     }
 
@@ -277,11 +346,13 @@ Window {
     function playFirstLaunch() {
         if (firstLaunchPlayed)
             return
+        const monitor = ringMonitorGeometry()
+        if (!monitor)
+            return
         firstLaunchPlayed = true
         rememberTheme()
         if (firstLaunchOverlay)
             return
-        const monitor = ringMonitorGeometry()
         const overlay = firstLaunchComponent.createObject(null, {
             monitorName: monitor.name,
             monitorWidth: monitor.width,
@@ -294,7 +365,7 @@ Window {
             lineColor: Qt.binding(function() { return root.themeColors.text }),
             outlineColor: Qt.binding(function() { return root.themeColors.text }),
             fillColor: Qt.binding(function() { return root.themeColors.blue }),
-            buttonText: Qt.binding(function() { return root.language === "ru" ? "Дальше" : "Continue" })
+            buttonText: Qt.binding(function() { return root.words.continueButton })
         })
         if (!overlay)
             return
@@ -373,7 +444,9 @@ Window {
         const colors = matugen ? colorsFrom(readJson(matugenColorsPath)) : colorSet(theme.colors)
         if (!colors)
             return
-        applyTheme(matugen ? (theme.activePreset || "Matugen") : (theme.activePreset || ""), colors)
+        if (!matugen && !theme.activePreset)
+            return
+        applyTheme(matugen ? (theme.activePreset || "Matugen") : theme.activePreset, colors)
         rememberTheme()
         playFirstLaunch()
     }
@@ -386,7 +459,6 @@ Window {
                 || theme.currentTheme === "matugen"
                 || theme.current === "matugen"
                 || theme.activePreset === "Matugen"
-                || theme.activePreset === undefined
     }
 
     Component.onDestruction: {
@@ -435,12 +507,13 @@ Window {
         otkatFolder = path
     }
 
-    function setSwitch(gathering) {
-        ringOn = gathering
+    function setSwitch(ringOn) {
+        root.ringOn = ringOn
     }
 
     function setRingMonitor(name) {
         ringMonitor = name
+        placeOnRingMonitor()
     }
 
     function setShellLanguage(next) {
@@ -453,9 +526,9 @@ Window {
 
     function plashkaPhrase(event) {
         if (event === Face.PlashkaEvent.NothingToSave)
-            return language === "ru" ? "Сохранять нечего" : "Nothing to save"
-        if (event === Face.PlashkaEvent.ClipNotSaved || event === Face.PlashkaEvent.ClipDidNotSave)
-            return language === "ru" ? "Откат не сохранился" : "Couldn't save the clip"
+            return words.nothingToSave
+        if (event === Face.PlashkaEvent.ClipDidNotSave)
+            return words.clipDidNotSave
         return ""
     }
 
@@ -479,45 +552,23 @@ Window {
 
     function encoderMark(item) {
         if (item === "H.264")
-            return h264Mark.text
+            return words.h264
         if (item === "HEVC")
-            return hevcMark.text
+            return words.hevc
         if (item === "AV1")
-            return av1Mark.text
+            return words.av1
         return ""
     }
 
     function settingLabel(key) {
-        if (key === "length")
-            return lengthLabel.text
-        if (key === "resolutionShare")
-            return resolutionShareLabel.text
-        if (key === "bitrate")
-            return bitrateLabel.text
-        if (key === "encoder")
-            return encoderLabel.text
-        if (key === "ringPlace")
-            return ringPlaceLabel.text
-        if (key === "ringMonitor")
-            return ringMonitorLabel.text
-        if (key === "bind")
-            return bindLabel.text
-        if (key === "language")
-            return languageLabel.text
-        if (key === "theme")
-            return themeLabel.text
-        if (key === "otkatFolder")
-            return otkatFolderLabel.text
-        if (key === "switch")
-            return switchLabel.text
-        return ""
+        return words[key] || ""
     }
 
     function languageChoice(choice) {
         if (choice === "en")
-            return englishChoice.text
+            return words.english
         if (choice === "ru")
-            return russianChoice.text
+            return words.russian
         return ""
     }
 
@@ -530,46 +581,29 @@ Window {
         id: settings
         visible: false
 
-        Text { id: lengthLabel; text: root.language === "ru" ? "Длина" : "Length" }
-        Text { id: resolutionShareLabel; text: root.language === "ru" ? "Доля разрешения" : "Resolution share" }
-        Text { id: bitrateLabel; text: root.language === "ru" ? "Битрейт" : "Bitrate" }
-        Text { id: encoderLabel; text: root.language === "ru" ? "Кодировщик" : "Encoder" }
+        Text { text: root.words.length }
+        Text { text: root.words.resolutionShare }
+        Text { text: root.words.bitrate }
+        Text { text: root.words.encoder }
+        Text { text: root.words.h264 }
+        Text { text: root.words.hevc }
+        Text { text: root.words.av1 }
+        Text { text: root.words.ringPlace }
+        Text { text: root.words.ringMonitor }
+        Text { text: root.words.bind }
+        Text { text: root.words.language }
+        Text { text: root.words.theme }
+        Text { text: root.words.otkatFolder }
+        Text { text: root.words.switch }
         Text {
-            id: h264Mark
-            text: root.language === "ru"
-                  ? "NVIDIA, AMD, Intel и компьютеры без аппаратного кодировщика"
-                  : "NVIDIA, AMD, Intel, and machines with no hardware encoder"
-        }
-        Text {
-            id: hevcMark
-            text: root.language === "ru"
-                  ? "NVIDIA, включая 3060 Ti и 3070 Ti, и AMD или Intel, если карта умеет HEVC"
-                  : "NVIDIA, including the 3060 Ti and 3070 Ti, and AMD or Intel when the card can do HEVC"
-        }
-        Text {
-            id: av1Mark
-            text: root.language === "ru"
-                  ? "NVIDIA с 40-й серии и AMD с RX 7000"
-                  : "NVIDIA from the 40 series and AMD from the RX 7000"
-        }
-        Text { id: ringPlaceLabel; text: root.language === "ru" ? "Место кольца" : "Ring place" }
-        Text { id: ringMonitorLabel; text: root.language === "ru" ? "Монитор кольца" : "Ring monitor" }
-        Text { id: bindLabel; text: root.language === "ru" ? "Бинд" : "Bind" }
-        Text { id: languageLabel; text: root.language === "ru" ? "Язык" : "Language" }
-        Text { id: themeLabel; text: root.language === "ru" ? "Тема" : "Theme" }
-        Text { id: otkatFolderLabel; text: root.language === "ru" ? "Папка откатов" : "Otkat folder" }
-        Text { id: switchLabel; text: root.language === "ru" ? "Выключатель" : "Switch" }
-        Text {
-            id: englishChoice
-            text: root.language === "ru" ? "Английский" : "English"
+            text: root.words.english
             MouseArea {
                 anchors.fill: parent
                 onClicked: root.chooseLanguage("en")
             }
         }
         Text {
-            id: russianChoice
-            text: root.language === "ru" ? "Русский" : "Russian"
+            text: root.words.russian
             MouseArea {
                 anchors.fill: parent
                 onClicked: root.chooseLanguage("ru")
@@ -581,7 +615,6 @@ Window {
         return event === Face.PlashkaEvent.NothingToSave
                 || event === Face.PlashkaEvent.NoSpace
                 || event === Face.PlashkaEvent.ClipDidNotSave
-                || event === Face.PlashkaEvent.ClipNotSaved
     }
 
     function ordinaryEvent(event) {
@@ -599,6 +632,7 @@ Window {
         plashka.alarm = alarmEvent(event)
         label.text = plashkaPhrase(event)
         visible = true
+        placeOnRingMonitor()
         hideTimer.restart()
     }
 

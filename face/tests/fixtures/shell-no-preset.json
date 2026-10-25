@@ -1,0 +1,9 @@
+{
+  "theme": {
+    "colors": {
+      "base": "#112233",
+      "text": "#ddeeff",
+      "blue": "#445566"
+    }
+  }
+}
