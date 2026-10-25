@@ -48,6 +48,8 @@ Window {
     readonly property color settingsColor: settingsSurface ? settingsSurface.color : "transparent"
     readonly property color settingsTextColor: settingsSurface ? settingsSurface.ink : "transparent"
     readonly property bool settingsVisible: settingsSurface ? settingsSurface.visible : false
+    // The otkat folder the face hands to the ring. ~/Videos/Откаты until the person changes it.
+    property string otkatFolder: homePath + "/Videos/Откаты"
     // The bind the face hands to the ring. Alt+Z until the person changes it.
     property string bind: "Alt+Z"
     // Reported by the shell. The program language does not follow either value.
@@ -223,6 +225,10 @@ Window {
 
     function setBind(chord) {
         bind = chord
+    }
+
+    function setOtkatFolder(path) {
+        otkatFolder = path
     }
 
     function setShellLanguage(next) {
