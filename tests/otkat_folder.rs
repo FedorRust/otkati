@@ -1,4 +1,5 @@
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -73,7 +74,10 @@ fn the_next_otkat_is_written_in_the_folder_the_face_handed() {
     );
     drop(event);
 
-    assert_eq!(mp4_duration_secs(&handed.join("otkat1-2026-10-25.mp4")), 120);
+    assert_eq!(
+        mp4_duration_secs(&handed.join("otkat1-2026-10-25.mp4")),
+        120
+    );
     assert!(!old.path.join("otkat1-2026-10-25.mp4").exists());
     assert!(!old.path.join("otkat6-2026-10-25.mp4").exists());
 }
@@ -116,4 +120,41 @@ fn no_otkat_when_the_folder_cannot_be_created() {
         .map(|entry| entry.unwrap().file_name())
         .collect();
     assert_eq!(names, vec![std::ffi::OsString::from("not-a-directory")]);
+}
+
+#[test]
+fn no_otkat_when_the_parent_refuses_a_new_folder() {
+    let old = OtkatFolder::new();
+    let parent = old.path.join("locked");
+    fs::create_dir(&parent).unwrap();
+    let handed = parent.join("Откаты");
+    let mode = fs::metadata(&parent).unwrap().permissions().mode();
+    let mut locked = fs::metadata(&parent).unwrap().permissions();
+    locked.set_mode(0o555);
+    fs::set_permissions(&parent, locked).unwrap();
+    let _restore = ModeGuard { path: parent, mode };
+
+    let mut ring = Ring::with_clock(old.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.hold(Duration::from_secs(120));
+    ring.take_otkat_folder(&handed);
+    let event = ring.bind(Ring::default_bind());
+
+    assert_eq!(event, Some(PlashkaEvent::FolderNotCreated));
+    assert!(!handed.exists());
+}
+
+struct ModeGuard {
+    path: PathBuf,
+    mode: u32,
+}
+
+impl Drop for ModeGuard {
+    fn drop(&mut self) {
+        let mut perms = match fs::metadata(&self.path) {
+            Ok(meta) => meta.permissions(),
+            Err(_) => return,
+        };
+        perms.set_mode(self.mode);
+        let _ = fs::set_permissions(&self.path, perms);
+    }
 }

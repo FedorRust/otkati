@@ -343,10 +343,23 @@ fn otkat_folder_can_be_created(folder: &Path) -> bool {
             return false;
         }
         if parent.exists() {
-            return parent.is_dir();
+            return parent.is_dir() && directory_accepts_a_child(parent);
         }
         ancestor = parent;
     }
+}
+
+fn directory_accepts_a_child(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    extern "C" {
+        fn access(pathname: *const std::os::raw::c_char, mode: i32) -> i32;
+    }
+    const W_OK: i32 = 2;
+    const X_OK: i32 = 1;
+    unsafe { access(c_path.as_ptr(), W_OK | X_OK) == 0 }
 }
 
 fn next_otkat_number(folder: &Path) -> u32 {
