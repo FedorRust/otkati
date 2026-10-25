@@ -62,4 +62,24 @@ TestCase {
         compare(face.plashkaColor, "#336699")
         compare(face.visible, true)
     }
+
+    function test_a_new_machine_stays_on_h264_until_an_offered_item_is_chosen() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.setTheme("#336699")
+        compare(face.encoder, "H.264")
+        compare(face.encoderSelectable("AV1"), false)
+        face.chooseEncoder("AV1")
+        compare(face.encoder, "H.264")
+        compare(face.visible, false)
+        compare(face.plashkaEvent, -1)
+        compare(face.plashkaColor, "#336699")
+
+        face.setOfferedEncoders(["H.264", "HEVC", "AV1"])
+        compare(face.encoder, "H.264")
+        face.chooseEncoder("AV1")
+        compare(face.encoder, "AV1")
+        compare(face.visible, false)
+        compare(face.plashkaColor, "#336699")
+    }
 }
