@@ -111,3 +111,24 @@ fn a_length_shorter_than_fifteen_seconds_does_not_change_the_aim() {
         15
     );
 }
+
+#[test]
+fn a_length_past_twenty_minutes_does_not_change_the_aim() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.take_length(Duration::from_secs(1200));
+    ring.take_length(Duration::from_secs(1201));
+    ring.hold(Duration::from_secs(1300));
+
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.duration(), Duration::from_secs(1200));
+    drop(event);
+
+    assert_eq!(
+        mp4_duration_secs(&folder.path.join("otkat1-2026-10-25.mp4")),
+        1200
+    );
+}
