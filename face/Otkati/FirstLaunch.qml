@@ -14,6 +14,7 @@ Window {
     property color lineColor: "transparent"
     property color outlineColor: "transparent"
     property color fillColor: "transparent"
+    property string buttonText: ""
     property var lines: []
 
     property string step: ""
@@ -102,10 +103,31 @@ Window {
         color: overlay.wipeColor
     }
 
-    Column {
+    Rectangle {
+        id: continueButton
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 48
+        anchors.bottomMargin: 36
+        width: continueLabel.implicitWidth + 36
+        height: continueLabel.implicitHeight + 18
+        radius: 6
+        color: overlay.wipeColor
+        border.color: overlay.lineColor
+        border.width: 1
+
+        Text {
+            id: continueLabel
+            anchors.centerIn: parent
+            text: overlay.buttonText
+            color: overlay.lineColor
+            font.pixelSize: 18
+        }
+    }
+
+    Column {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: continueButton.top
+        anchors.bottomMargin: 28
         spacing: 8
         visible: overlay.step === "lines" || overlay.step === "penguin" || overlay.step === "ready"
 

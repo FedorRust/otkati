@@ -119,4 +119,45 @@ TestCase {
         verify(Math.abs(face.penguinFillHeight - face.penguinHeight) <= 1)
         verify(Math.abs((face.penguinFillTop + face.penguinFillHeight) - face.penguinHeight) <= 1)
     }
+
+    function test_the_lines_and_the_button_follow_the_program_language() {
+        const english = [
+            "Welcome",
+            "The last minutes are already kept.",
+            "Alt+Z saves a clip.",
+            "FedorRust"
+        ]
+        const russian = [
+            "Добро пожаловать",
+            "Последние минуты уже пишутся.",
+            "Alt+Z сохраняет откат.",
+            "FedorRust"
+        ]
+        const face = faceOn("shell-north.json", freshStore())
+
+        compare(face.firstLaunchLines[0], english[0])
+        compare(face.firstLaunchLines[1], english[1])
+        compare(face.firstLaunchLines[2], english[2])
+        compare(face.firstLaunchLines[3], english[3])
+        compare(face.firstLaunchButton, "Continue")
+
+        face.chooseLanguage("ru")
+        compare(face.firstLaunchLines[0], russian[0])
+        compare(face.firstLaunchLines[1], russian[1])
+        compare(face.firstLaunchLines[2], russian[2])
+        compare(face.firstLaunchLines[3], russian[3])
+        compare(face.firstLaunchLines[3], english[3])
+        compare(face.firstLaunchButton, "Дальше")
+
+        const again = createTemporaryObject(faceComponent, null)
+        verify(again)
+        again.cataloguePath = filePath("themes")
+        again.shellSettingsPath = filePath("shell-north.json")
+        again.matugenColorsPath = filePath("matugen-colors.json")
+        again.themeStorePath = freshStore()
+        again.chooseLanguage("ru")
+        again.openSettings()
+        compare(again.firstLaunchButton, "Дальше")
+        tryVerify(function() { return again.typedLines.join("\n") === russian.join("\n") })
+    }
 }

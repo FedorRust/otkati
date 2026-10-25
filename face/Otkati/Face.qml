@@ -68,12 +68,18 @@ Window {
     readonly property string firstLaunchStep: firstLaunchOverlay ? firstLaunchOverlay.step : ""
     readonly property real screenWipe: firstLaunchOverlay ? firstLaunchOverlay.wipe : 0
     readonly property real screenWipeWidth: firstLaunchOverlay ? firstLaunchOverlay.screenWipeWidth : 0
-    readonly property var firstLaunchLines: [
+    readonly property var firstLaunchLines: language === "ru" ? [
+        "Добро пожаловать",
+        "Последние минуты уже пишутся.",
+        "Alt+Z сохраняет откат.",
+        "FedorRust"
+    ] : [
         "Welcome",
         "The last minutes are already kept.",
         "Alt+Z saves a clip.",
         "FedorRust"
     ]
+    readonly property string firstLaunchButton: firstLaunchOverlay ? firstLaunchOverlay.buttonText : ""
     readonly property var typedLines: firstLaunchOverlay ? firstLaunchOverlay.typedLines : []
     readonly property real penguinFillLevel: firstLaunchOverlay ? firstLaunchOverlay.fillLevel : 0
     readonly property real penguinFillTop: firstLaunchOverlay ? firstLaunchOverlay.penguinFillTop : 0
@@ -247,7 +253,8 @@ Window {
             wipeColor: Qt.binding(function() { return root.themeColors.base }),
             lineColor: Qt.binding(function() { return root.themeColors.text }),
             outlineColor: Qt.binding(function() { return root.themeColors.text }),
-            fillColor: Qt.binding(function() { return root.themeColors.blue })
+            fillColor: Qt.binding(function() { return root.themeColors.blue }),
+            buttonText: Qt.binding(function() { return root.language === "ru" ? "Дальше" : "Continue" })
         })
         const screen = screenNamed(monitor.name)
         if (screen) {
