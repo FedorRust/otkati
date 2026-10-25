@@ -160,4 +160,37 @@ TestCase {
         compare(again.firstLaunchButton, "Дальше")
         tryVerify(function() { return again.typedLines.join("\n") === russian.join("\n") })
     }
+
+    function test_continue_or_escape_closes_the_overlay_and_leaves_the_knobs() {
+        const face = faceOn("shell-north.json", freshStore())
+        compare(face.firstLaunchVisible, true)
+        face.continueFirstLaunch()
+        compare(face.firstLaunchVisible, false)
+        compare(face.settingsVisible, true)
+        compare(face.settingLabel("length"), "Length")
+        compare(face.settingLabel("resolutionShare"), "Resolution share")
+        compare(face.settingLabel("bitrate"), "Bitrate")
+        face.setLength(45)
+        face.setResolutionShare(70)
+        face.setBitrate(32)
+        compare(face.length, 45)
+        compare(face.resolutionShare, 70)
+        compare(face.bitrate, 32)
+
+        const escaped = faceOn("shell-north.json", freshStore())
+        compare(escaped.firstLaunchVisible, true)
+        escaped.escapeFirstLaunch()
+        compare(escaped.firstLaunchVisible, false)
+        compare(escaped.settingsVisible, true)
+        escaped.chooseLanguage("ru")
+        compare(escaped.settingLabel("length"), "Длина")
+        compare(escaped.settingLabel("resolutionShare"), "Доля разрешения")
+        compare(escaped.settingLabel("bitrate"), "Битрейт")
+        escaped.setLength(20)
+        escaped.setResolutionShare(50)
+        escaped.setBitrate(8)
+        compare(escaped.length, 20)
+        compare(escaped.resolutionShare, 50)
+        compare(escaped.bitrate, 8)
+    }
 }

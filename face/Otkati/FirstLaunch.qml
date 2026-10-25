@@ -17,6 +17,9 @@ Window {
     property string buttonText: ""
     property var lines: []
 
+    signal continued()
+    signal escaped()
+
     property string step: ""
     property real wipe: 0
     property real typedCount: 0
@@ -58,6 +61,13 @@ Window {
         typedCount = 0
         fillLevel = 0
         gesture.start()
+        overlay.requestActivate()
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.WindowShortcut
+        onActivated: overlay.escaped()
     }
 
     Component.onCompleted: play()
@@ -121,6 +131,11 @@ Window {
             text: overlay.buttonText
             color: overlay.lineColor
             font.pixelSize: 18
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: overlay.continued()
         }
     }
 

@@ -266,6 +266,8 @@ Window {
                 overlay.height = monitor.height
             }
         }
+        overlay.continued.connect(continueFirstLaunch)
+        overlay.escaped.connect(escapeFirstLaunch)
         firstLaunchOverlay = overlay
     }
 
@@ -274,6 +276,14 @@ Window {
     }
 
     function continueFirstLaunch() {
+        dismissFirstLaunch()
+    }
+
+    function escapeFirstLaunch() {
+        dismissFirstLaunch()
+    }
+
+    function dismissFirstLaunch() {
         if (firstLaunchOverlay)
             firstLaunchOverlay.visible = false
     }
