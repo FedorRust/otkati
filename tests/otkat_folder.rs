@@ -95,3 +95,25 @@ fn files_already_in_the_old_folder_stay_there() {
     assert_eq!(fs::read(&kept).unwrap(), b"kept");
     assert!(!handed.join("otkat5-2026-10-24.mp4").exists());
 }
+
+#[test]
+fn no_otkat_when_the_folder_cannot_be_created() {
+    let old = OtkatFolder::new();
+    let blocked = old.path.join("not-a-directory");
+    fs::write(&blocked, b"file").unwrap();
+    let handed = blocked.join("Откаты");
+    let mut ring = Ring::with_clock(old.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.hold(Duration::from_secs(120));
+
+    ring.take_otkat_folder(&handed);
+    let event = ring.bind(Ring::default_bind());
+
+    assert_eq!(event, Some(PlashkaEvent::FolderNotCreated));
+    assert!(!handed.exists());
+    assert_eq!(fs::read(&blocked).unwrap(), b"file");
+    let names: Vec<_> = fs::read_dir(&old.path)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(names, vec![std::ffi::OsString::from("not-a-directory")]);
+}

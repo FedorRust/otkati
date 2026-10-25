@@ -69,6 +69,8 @@ pub enum PlashkaEvent {
     Saved(SavedOtkat),
     /// The person has not answered which screen the program may see.
     NoAccess,
+    /// The otkat folder could not be created, so there is no file.
+    FolderNotCreated,
 }
 
 impl PartialEq for PlashkaEvent {
@@ -76,6 +78,7 @@ impl PartialEq for PlashkaEvent {
         match (self, other) {
             (Self::NothingToSave, Self::NothingToSave) => true,
             (Self::NoAccess, Self::NoAccess) => true,
+            (Self::FolderNotCreated, Self::FolderNotCreated) => true,
             (Self::Saved(left), Self::Saved(right)) => {
                 left.name == right.name && left.duration == right.duration
             }
@@ -292,9 +295,11 @@ impl Ring {
     /// When it is not the ring's bind, nothing is saved. When the session is
     /// still waiting for the person's screen, answers with
     /// [`PlashkaEvent::NoAccess`]. When the ring holds no frame, answers with
-    /// [`PlashkaEvent::NothingToSave`]. Neither of those creates a file.
-    /// A ring that holds frames answers with [`PlashkaEvent::Saved`]; the file
-    /// is written when that value is dropped.
+    /// [`PlashkaEvent::NothingToSave`]. When the otkat folder cannot be
+    /// created, answers with [`PlashkaEvent::FolderNotCreated`]. None of those
+    /// creates a file. A ring that holds frames and can use the folder answers
+    /// with [`PlashkaEvent::Saved`]; the file is written when that value is
+    /// dropped.
     pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
         if chord != self.bind {
             return None;
@@ -304,6 +309,9 @@ impl Ring {
         }
         if self.held.is_zero() {
             return Some(PlashkaEvent::NothingToSave);
+        }
+        if !otkat_folder_can_be_created(&self.otkat_folder) {
+            return Some(PlashkaEvent::FolderNotCreated);
         }
         let day = (self.clock)();
         let duration = self.held.min(CHOSEN_LENGTH);
@@ -315,6 +323,29 @@ impl Ring {
             duration,
             pending: Some(PendingOtkat { path, duration }),
         }))
+    }
+}
+
+/// The folder is created with the file, after the plashka, so this only looks.
+fn otkat_folder_can_be_created(folder: &Path) -> bool {
+    if folder.is_dir() {
+        return true;
+    }
+    if folder.exists() {
+        return false;
+    }
+    let mut ancestor = folder;
+    loop {
+        let Some(parent) = ancestor.parent() else {
+            return false;
+        };
+        if parent == ancestor {
+            return false;
+        }
+        if parent.exists() {
+            return parent.is_dir();
+        }
+        ancestor = parent;
     }
 }
 
