@@ -194,4 +194,20 @@ TestCase {
         compare(again.themeColors.text, "#d0d0e0")
         compare(again.themeColors.blue, "#0000bb")
     }
+
+    function test_choosing_matugen_takes_the_wallpaper_colors_and_keeps_them() {
+        const store = freshStore()
+        const face = faceOn("shell-north.json", store)
+        face.setTheme("Matugen")
+        compare(face.themeName, "Matugen")
+        compare(face.settingsColor, "#112233")
+        compare(face.themeColors.text, "#abcabc")
+        compare(face.themeColors.blue, "#445566")
+
+        const again = faceOn("shell-north.json", store, "matugen-colors-later.json")
+        compare(again.themeName, "Matugen")
+        compare(again.settingsColor, "#112233")
+        compare(again.themeColors.text, "#abcabc")
+        compare(again.themeColors.blue, "#445566")
+    }
 }

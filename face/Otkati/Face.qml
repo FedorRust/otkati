@@ -43,7 +43,10 @@ Window {
         }
         if (!hasReadyTheme(next))
             return
-        const colors = colorsFrom(readJson(themeByName[next]))
+        const data = readJson(themeByName[next])
+        const colors = data && data.isMatugen === true
+                ? colorsFrom(readJson(matugenColorsPath))
+                : colorsFrom(data)
         if (!colors)
             return
         applyTheme(next, colors)
