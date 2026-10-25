@@ -275,7 +275,12 @@ impl Ring {
     }
 
     /// The face hands the ring the length it aims to hold.
+    ///
+    /// A length shorter than 15 seconds leaves the aim unchanged.
     pub fn take_length(&mut self, length: Duration) {
+        if length < Duration::from_secs(15) {
+            return;
+        }
         self.chosen_length = length;
     }
 
