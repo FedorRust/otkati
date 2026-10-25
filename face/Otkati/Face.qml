@@ -18,6 +18,7 @@ Window {
         Saved,
         ClipNotSaved,
         NoAccess,
+        FolderNotCreated,
         RingOff
     }
 
@@ -54,6 +55,8 @@ Window {
     readonly property color settingsColor: settingsSurface ? settingsSurface.color : "transparent"
     readonly property color settingsTextColor: settingsSurface ? settingsSurface.ink : "transparent"
     readonly property bool settingsVisible: settingsSurface ? settingsSurface.visible : false
+    // The otkat folder the face hands to the ring. ~/Videos/Откаты until the person changes it.
+    property string otkatFolder: homePath + "/Videos/Откаты"
     // The bind the face hands to the ring. Alt+Z until the person changes it.
     property string bind: "Alt+Z"
     // The length, in seconds, the face hands to the ring. Ten minutes until the person changes it.
@@ -247,6 +250,10 @@ Window {
         ringPlace = place
     }
 
+    function setOtkatFolder(path) {
+        otkatFolder = path
+    }
+
     function setSwitch(gathering) {
         ringOn = gathering
     }
@@ -350,6 +357,7 @@ Window {
         return event === Face.PlashkaEvent.Ordinary
                 || event === Face.PlashkaEvent.Saved
                 || event === Face.PlashkaEvent.NoAccess
+                || event === Face.PlashkaEvent.FolderNotCreated
                 || event === Face.PlashkaEvent.RingOff
     }
 

@@ -87,6 +87,8 @@ pub enum PlashkaEvent {
     Saved(SavedOtkat),
     /// The person has not answered which screen the program may see.
     NoAccess,
+    /// The otkat folder could not be created, so there is no file.
+    FolderNotCreated,
     /// The ring is off, so the bind saves nothing.
     RingOff,
 }
@@ -96,6 +98,7 @@ impl PartialEq for PlashkaEvent {
         match (self, other) {
             (Self::NothingToSave, Self::NothingToSave) => true,
             (Self::NoAccess, Self::NoAccess) => true,
+            (Self::FolderNotCreated, Self::FolderNotCreated) => true,
             (Self::RingOff, Self::RingOff) => true,
             (Self::Saved(left), Self::Saved(right)) => {
                 left.name == right.name && left.duration == right.duration
@@ -390,15 +393,25 @@ impl Ring {
         self.bind = bind;
     }
 
+    /// The face hands the ring a new otkat folder.
+    ///
+    /// The next otkat is written there. Files already in the previous folder
+    /// stay where they are.
+    pub fn take_otkat_folder(&mut self, folder: impl Into<PathBuf>) {
+        self.otkat_folder = folder.into();
+    }
+
     /// `chord` reached the ring.
     ///
     /// When it is not the ring's bind, nothing is saved. When the ring is off,
     /// answers with [`PlashkaEvent::RingOff`]. When the session is still
     /// waiting for the person's screen, answers with
     /// [`PlashkaEvent::NoAccess`]. When the ring holds no frame, answers with
-    /// [`PlashkaEvent::NothingToSave`]. None of those creates a file.
-    /// A ring that holds frames answers with [`PlashkaEvent::Saved`]; the file
-    /// is written when that value is dropped.
+    /// [`PlashkaEvent::NothingToSave`]. When the otkat folder cannot be
+    /// created, answers with [`PlashkaEvent::FolderNotCreated`]. None of those
+    /// creates a file. A ring that holds frames and can use the folder answers
+    /// with [`PlashkaEvent::Saved`]; the file is written when that value is
+    /// dropped.
     pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
         if chord != self.bind {
             return None;
@@ -411,6 +424,9 @@ impl Ring {
         }
         if self.held.is_zero() {
             return Some(PlashkaEvent::NothingToSave);
+        }
+        if !otkat_folder_can_be_created(&self.otkat_folder) {
+            return Some(PlashkaEvent::FolderNotCreated);
         }
         let day = (self.clock)();
         let duration = self.held.min(self.chosen_length);
@@ -433,6 +449,42 @@ fn home_dir() -> PathBuf {
 
 fn ring_folder_under(home: &Path) -> PathBuf {
     home.join(".local/state/otkati/ring")
+}
+
+/// The folder is created with the file, after the plashka, so this only looks.
+fn otkat_folder_can_be_created(folder: &Path) -> bool {
+    if folder.is_dir() {
+        return true;
+    }
+    if folder.exists() {
+        return false;
+    }
+    let mut ancestor = folder;
+    loop {
+        let Some(parent) = ancestor.parent() else {
+            return false;
+        };
+        if parent == ancestor {
+            return false;
+        }
+        if parent.exists() {
+            return parent.is_dir() && directory_accepts_a_child(parent);
+        }
+        ancestor = parent;
+    }
+}
+
+fn directory_accepts_a_child(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    extern "C" {
+        fn access(pathname: *const std::os::raw::c_char, mode: i32) -> i32;
+    }
+    const W_OK: i32 = 2;
+    const X_OK: i32 = 1;
+    unsafe { access(c_path.as_ptr(), W_OK | X_OK) == 0 }
 }
 
 fn next_otkat_number(folder: &Path) -> u32 {
