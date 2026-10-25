@@ -1,0 +1,13 @@
+[package]
+name = "otkati"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "otkati"
+path = "src/lib.rs"
+
+[[bin]]
+name = "otkati-ring"
+path = "src/main.rs"
