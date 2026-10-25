@@ -8,8 +8,12 @@ use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+mod process;
 mod session;
+pub use process::run_ring_process;
 pub use session::{HyprlandSession, SessionAutostart};
+
+type RingTalk = Arc<Mutex<dyn FnMut(&str) -> String + Send>>;
 
 /// Where the encoded ring lies until an otkat is saved from it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -354,6 +358,7 @@ pub struct SavedOtkat {
     height: u32,
     bitrate_mbit: u8,
     pending: Option<PendingOtkat>,
+    process_commit: Option<ProcessCommit>,
     monitor: Option<Screen>,
     cursor_in_picture: bool,
     output_sound: bool,
@@ -419,11 +424,31 @@ impl SavedOtkat {
     }
 }
 
+struct ProcessCommit {
+    talk: RingTalk,
+    later: mpsc::Sender<PlashkaEvent>,
+}
+
+impl std::fmt::Debug for ProcessCommit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ProcessCommit")
+    }
+}
+
 impl Drop for SavedOtkat {
     fn drop(&mut self) {
         if let Some(pending) = self.pending.take() {
             let queue = Arc::clone(&pending.queue);
             queue.write_when_its_turn(pending);
+        }
+        if let Some(commit) = self.process_commit.take() {
+            let reply = {
+                let mut talk = commit.talk.lock().unwrap();
+                talk("commit")
+            };
+            if reply == "clip-did-not-save" {
+                let _ = commit.later.send(PlashkaEvent::ClipDidNotSave);
+            }
         }
     }
 }
@@ -563,8 +588,13 @@ struct QueueInner {
 }
 
 impl OtkatQueue {
-    fn new() -> (Self, mpsc::Receiver<PlashkaEvent>) {
+    fn new() -> (
+        Self,
+        mpsc::Receiver<PlashkaEvent>,
+        mpsc::Sender<PlashkaEvent>,
+    ) {
         let (later_plashka, later_plashki) = mpsc::channel();
+        let later_tx = later_plashka.clone();
         (
             Self {
                 inner: Mutex::new(QueueInner {
@@ -577,6 +607,7 @@ impl OtkatQueue {
                 later_plashka,
             },
             later_plashki,
+            later_tx,
         )
     }
 
@@ -666,9 +697,13 @@ pub struct Ring {
     bitrate: Bitrate,
     queue: Arc<OtkatQueue>,
     later_plashki: mpsc::Receiver<PlashkaEvent>,
+    later_tx: mpsc::Sender<PlashkaEvent>,
     card: Option<Card>,
     encoder: Encoder,
     switch: Switch,
+    home: PathBuf,
+    persist_answer: bool,
+    talk: Option<RingTalk>,
 }
 
 impl Ring {
@@ -701,7 +736,8 @@ impl Ring {
     /// [`Ring::new`] uses the process home. A new ring stays in memory.
     pub fn with_home(otkat_folder: impl Into<PathBuf>, home: impl Into<PathBuf>) -> Self {
         let mut ring = Self::new(otkat_folder);
-        ring.ring_folder = ring_folder_under(&home.into());
+        ring.persist_at(home.into());
+        ring.persist_answer = false;
         ring
     }
 
@@ -743,26 +779,7 @@ impl Ring {
         otkat_folder: impl Into<PathBuf>,
         clock: impl Fn() -> BindDay + Send + 'static,
     ) -> Self {
-        let (queue, later_plashki) = OtkatQueue::new();
-        Self {
-            otkat_folder: otkat_folder.into(),
-            held: Duration::ZERO,
-            chosen_length: DEFAULT_LENGTH,
-            clock: Box::new(clock),
-            waiting_for_screen: false,
-            screen: None,
-            segment: None,
-            bind: Self::default_bind(),
-            ring_place: RingPlace::Memory,
-            ring_folder: ring_folder_under(&home_dir()),
-            resolution_share: ResolutionShare::default(),
-            bitrate: Bitrate::default(),
-            queue: Arc::new(queue),
-            later_plashki,
-            card: None,
-            encoder: Encoder::H264,
-            switch: Switch::On,
-        }
+        Self::open(otkat_folder.into(), Box::new(clock), false, None)
     }
 
     /// Enter a session.
@@ -774,26 +791,98 @@ impl Ring {
     /// monitor.
     pub fn enter_session(otkat_folder: impl Into<PathBuf>, remembered: Option<Screen>) -> Self {
         let waiting_for_screen = remembered.is_none();
-        let (queue, later_plashki) = OtkatQueue::new();
+        Self::open(
+            otkat_folder.into(),
+            Box::new(system_bind_day),
+            waiting_for_screen,
+            remembered,
+        )
+    }
+
+    fn open(
+        otkat_folder: PathBuf,
+        clock: Box<dyn Fn() -> BindDay + Send>,
+        waiting_for_screen: bool,
+        screen: Option<Screen>,
+    ) -> Self {
+        let (queue, later_plashki, later_tx) = OtkatQueue::new();
+        let home = home_dir();
         Self {
-            otkat_folder: otkat_folder.into(),
+            otkat_folder,
             held: Duration::ZERO,
             chosen_length: DEFAULT_LENGTH,
-            clock: Box::new(system_bind_day),
+            clock,
             waiting_for_screen,
-            screen: remembered,
+            screen,
             segment: None,
             bind: Self::default_bind(),
             ring_place: RingPlace::Memory,
-            ring_folder: ring_folder_under(&home_dir()),
+            home: home.clone(),
+            ring_folder: ring_folder_under(&home),
             resolution_share: ResolutionShare::default(),
             bitrate: Bitrate::default(),
             queue: Arc::new(queue),
             later_plashki,
+            later_tx,
             card: None,
             encoder: Encoder::H264,
             switch: Switch::On,
+            persist_answer: false,
+            talk: None,
         }
+    }
+
+    pub(crate) fn persist_at(&mut self, home: PathBuf) {
+        self.ring_folder = ring_folder_under(&home);
+        self.home = home;
+        self.persist_answer = true;
+    }
+
+    pub(crate) fn begin_waiting(&mut self) {
+        self.waiting_for_screen = true;
+        self.screen = None;
+    }
+
+    pub(crate) fn attach_process(&mut self, talk: RingTalk) {
+        self.talk = Some(talk);
+        self.pull_from_process();
+    }
+
+    pub(crate) fn release_process(&mut self) {
+        self.talk = None;
+        self.held = Duration::ZERO;
+        self.segment = None;
+    }
+
+    fn say(&self, line: &str) -> String {
+        let talk = self.talk.as_ref().expect("the ring process is attached");
+        let mut talk = talk.lock().unwrap();
+        talk(line)
+    }
+
+    fn pull_from_process(&mut self) {
+        let Some(talk) = self.talk.clone() else {
+            return;
+        };
+        let reply = {
+            let mut talk = talk.lock().unwrap();
+            talk("query")
+        };
+        let mut parts = reply.split('\t');
+        let waiting = parts.next() == Some("1");
+        let monitor = parts.next().unwrap_or("-");
+        let held = parts
+            .next()
+            .unwrap_or("0")
+            .parse::<u64>()
+            .unwrap_or(0);
+        self.waiting_for_screen = waiting;
+        self.screen = if monitor == "-" {
+            None
+        } else {
+            Some(Screen::new(monitor))
+        };
+        self.held = Duration::from_secs(held);
     }
 
     /// Whether this session still asks which screen to give the program.
@@ -804,8 +893,16 @@ impl Ring {
     /// The person answered with this screen. It is the ring's monitor, and
     /// the session stops asking.
     pub fn remember_screen(&mut self, screen: Screen) {
+        if self.talk.is_some() {
+            let _ = self.say(&format!("remember\t{}", screen.name()));
+            self.pull_from_process();
+            return;
+        }
         self.screen = Some(screen);
         self.waiting_for_screen = false;
+        if self.persist_answer {
+            self.write_screen_answer();
+        }
     }
 
     /// Offer a screen to the ring.
@@ -985,6 +1082,10 @@ impl Ring {
         if self.switch == Switch::Off {
             return;
         }
+        if self.talk.is_some() {
+            let _ = self.say(&format!("hold\t{}", held.as_secs()));
+            return;
+        }
         self.held = held;
     }
 
@@ -1091,6 +1192,9 @@ impl Ring {
     /// wait for an earlier file that is still being written. That otkat keeps
     /// the ring as it is at this bind and waits in the queue.
     pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
+        if self.talk.is_some() {
+            return self.bind_on_process(&chord);
+        }
         if chord != self.bind {
             return None;
         }
@@ -1153,6 +1257,7 @@ impl Ring {
                 number,
                 queue: Arc::clone(&self.queue),
             }),
+            process_commit: None,
             monitor,
             cursor_in_picture,
             output_sound,
@@ -1160,6 +1265,61 @@ impl Ring {
             encoded: true,
             frames_per_second,
         }))
+    }
+
+    fn bind_on_process(&mut self, chord: &Bind) -> Option<PlashkaEvent> {
+        let reply = self.say(&format!("bind\t{}", chord.text()));
+        let mut parts = reply.split('\t');
+        let kind = parts.next().unwrap_or("");
+        match kind {
+            "none" => None,
+            "nothing" => Some(PlashkaEvent::NothingToSave),
+            "no-access" => Some(PlashkaEvent::NoAccess),
+            "folder" => Some(PlashkaEvent::FolderNotCreated),
+            "no-space" => Some(PlashkaEvent::NoSpace),
+            "ring-off" => Some(PlashkaEvent::RingOff),
+            "clip-did-not-save" => Some(PlashkaEvent::ClipDidNotSave),
+            "saved" => {
+                let name = parts.next().unwrap_or("otkat.mp4").to_string();
+                let secs = parts.next().unwrap_or("0").parse::<u64>().unwrap_or(0);
+                let talk = self.talk.clone().expect("the ring process is attached");
+                Some(PlashkaEvent::Saved(SavedOtkat {
+                    name,
+                    duration: Duration::from_secs(secs),
+                    width: 0,
+                    height: 0,
+                    bitrate_mbit: 0,
+                    pending: None,
+                    process_commit: Some(ProcessCommit {
+                        talk,
+                        later: self.later_tx.clone(),
+                    }),
+                    monitor: None,
+                    cursor_in_picture: false,
+                    output_sound: false,
+                    microphone: false,
+                    encoded: true,
+                    frames_per_second: 0,
+                }))
+            }
+            _ => None,
+        }
+    }
+
+    fn write_screen_answer(&self) {
+        let Some(screen) = &self.screen else {
+            return;
+        };
+        let path = screen_answer_path(&self.home);
+        if let Some(parent) = path.parent() {
+            if let Err(err) = fs::create_dir_all(parent) {
+                eprintln!("screen answer folder was not created: {err}");
+                return;
+            }
+        }
+        if let Err(err) = fs::write(&path, format!("{}\n", screen.name())) {
+            eprintln!("screen answer was not remembered: {err}");
+        }
     }
 }
 
@@ -1219,6 +1379,20 @@ fn home_dir() -> PathBuf {
 
 fn ring_folder_under(home: &Path) -> PathBuf {
     home.join(".local/state/otkati/ring")
+}
+
+fn screen_answer_path(home: &Path) -> PathBuf {
+    home.join(".local/state/otkati/screen-answer")
+}
+
+fn read_screen_answer(home: &Path) -> Option<Screen> {
+    let text = fs::read_to_string(screen_answer_path(home)).ok()?;
+    let name = text.lines().next()?.trim();
+    if name.is_empty() {
+        None
+    } else {
+        Some(Screen::new(name))
+    }
 }
 
 /// The folder is created with the file, after the plashka, so this only looks.

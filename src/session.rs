@@ -1,10 +1,11 @@
 use std::fs;
+use std::io::{BufRead, BufReader, Write};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::time::Duration;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::{Arc, Mutex};
 
-use crate::{BindDay, Ring};
+use crate::{BindDay, Ring, RingTalk};
 
 /// How the ring enters a Hyprland session.
 ///
@@ -31,7 +32,9 @@ impl SessionAutostart {
     /// The ring is already running. The person does not open it.
     /// `program_dir` is where the session finds the program the autostart names.
     pub fn log_in(&self, program_dir: impl AsRef<Path>) -> HyprlandSession {
-        self.open(program_dir, Ring::new(Ring::default_otkat_folder()))
+        let folder = Ring::default_otkat_folder();
+        let ring = Ring::new(folder.clone());
+        self.open(program_dir, ring, serve_env(&folder, None, None, true))
     }
 
     /// Log in, with `clock` answering the bind day.
@@ -44,10 +47,44 @@ impl SessionAutostart {
         program_dir: impl AsRef<Path>,
         clock: impl Fn() -> BindDay + Send + 'static,
     ) -> HyprlandSession {
-        self.open(program_dir, Ring::with_clock(otkat_folder, clock))
+        let folder = otkat_folder.into();
+        let day = clock();
+        let ring = Ring::with_clock(folder.clone(), move || day);
+        self.open(
+            program_dir,
+            ring,
+            serve_env(&folder, None, Some(day), true),
+        )
     }
 
-    fn open(&self, program_dir: impl AsRef<Path>, ring: Ring) -> HyprlandSession {
+    /// Log in to a ring that asks which screen until the process has remembered one.
+    ///
+    /// `home` is where that answer is kept. The next session with the same home
+    /// does not ask again.
+    pub fn log_in_at(
+        &self,
+        otkat_folder: impl Into<PathBuf>,
+        home: impl Into<PathBuf>,
+        program_dir: impl AsRef<Path>,
+        clock: impl Fn() -> BindDay + Send + 'static,
+    ) -> HyprlandSession {
+        let folder = otkat_folder.into();
+        let home = home.into();
+        let day = clock();
+        let ring = Ring::enter_session(folder.clone(), None);
+        self.open(
+            program_dir,
+            ring,
+            serve_env(&folder, Some(&home), Some(day), false),
+        )
+    }
+
+    fn open(
+        &self,
+        program_dir: impl AsRef<Path>,
+        mut ring: Ring,
+        env: Vec<(String, String)>,
+    ) -> HyprlandSession {
         let shell = spawn_shell();
         let ring_process = if self.starts_with_graphical_session {
             let program = resolve_program(&self.exec_start, program_dir.as_ref());
@@ -56,7 +93,27 @@ impl SessionAutostart {
             } else {
                 None
             };
-            Some(spawn_in_group(&program, group))
+            let mut child = spawn_ring(&program, group, &env);
+            let stdin = child.stdin.take().expect("ring stdin");
+            let stdout = BufReader::new(child.stdout.take().expect("ring stdout"));
+            let pipe = Arc::new(Mutex::new(ProcessPipe { stdin, stdout }));
+            let talk_pipe = Arc::clone(&pipe);
+            let talk: RingTalk = Arc::new(Mutex::new(move |line: &str| {
+                let mut pipe = talk_pipe.lock().unwrap();
+                writeln!(pipe.stdin, "{line}").expect("ring process stdin");
+                pipe.stdin.flush().expect("ring process stdin");
+                let mut reply = String::new();
+                let read = pipe
+                    .stdout
+                    .read_line(&mut reply)
+                    .expect("ring process stdout");
+                if read == 0 {
+                    panic!("ring process closed stdout answering: {line}");
+                }
+                reply.trim_end().to_string()
+            }));
+            ring.attach_process(talk);
+            Some(child)
         } else {
             None
         };
@@ -102,8 +159,9 @@ impl HyprlandSession {
         parent_pid(ring.id()) == self.shell.id()
     }
 
-    /// The ring this session is holding. A bind saves from it.
+    /// The ring this session is holding. A bind saves from the ring process.
     pub fn ring(&mut self) -> &mut Ring {
+        self.ring.pull_from_process();
         &mut self.ring
     }
 
@@ -125,7 +183,7 @@ impl HyprlandSession {
             .as_mut()
             .is_some_and(|ring| matches!(ring.try_wait(), Ok(None)));
         if !alive {
-            self.ring.hold(Duration::ZERO);
+            self.ring.release_process();
         }
         self.shell = spawn_shell();
     }
@@ -215,15 +273,48 @@ fn spawn_shell() -> Child {
     command.spawn().expect("session starts Serpantinum")
 }
 
+struct ProcessPipe {
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+}
+
+fn serve_env(
+    folder: &Path,
+    home: Option<&Path>,
+    day: Option<BindDay>,
+    ready: bool,
+) -> Vec<(String, String)> {
+    let mut env = vec![
+        ("OTKATI_SERVE".to_string(), "1".to_string()),
+        (
+            "OTKATI_OTKAT_FOLDER".to_string(),
+            folder.display().to_string(),
+        ),
+    ];
+    if ready {
+        env.push(("OTKATI_READY".to_string(), "1".to_string()));
+    }
+    if let Some(home) = home {
+        env.push(("OTKATI_HOME".to_string(), home.display().to_string()));
+    }
+    if let Some(day) = day {
+        env.push(("OTKATI_BIND_DAY".to_string(), day.label()));
+    }
+    env
+}
+
 /// `group` is the shell's process group when the autostart ties the ring to
 /// Serpantinum. Otherwise the ring gets a group of its own.
-fn spawn_in_group(program: &Path, group: Option<u32>) -> Child {
+fn spawn_ring(program: &Path, group: Option<u32>, env: &[(String, String)]) -> Child {
     let mut command = Command::new(program);
     command
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
         .process_group(group.map(|pid| pid as i32).unwrap_or(0));
+    for (key, value) in env {
+        command.env(key, value);
+    }
     command
         .spawn()
         .unwrap_or_else(|err| panic!("session could not start {}: {err}", program.display()))
