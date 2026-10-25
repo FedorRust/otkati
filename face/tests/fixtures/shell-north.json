@@ -1,0 +1,30 @@
+{
+  "theme": {
+    "activePreset": "North",
+    "matugen": false,
+    "colors": {
+      "base": "#101418",
+      "mantle": "#181c22",
+      "crust": "#0c1014",
+      "text": "#e6edf3",
+      "subtext0": "#9aa4b2",
+      "subtext1": "#c5ced8",
+      "surface0": "#242a32",
+      "surface1": "#303844",
+      "surface2": "#3c4654",
+      "overlay0": "#6a7584",
+      "overlay1": "#7d8896",
+      "overlay2": "#909aaa",
+      "blue": "#7eb6ff",
+      "sapphire": "#5ec8e6",
+      "peach": "#ffb07a",
+      "green": "#8fd69a",
+      "red": "#ff8b9a",
+      "mauve": "#c4a6ff",
+      "pink": "#ffb3d9",
+      "yellow": "#ffe08a",
+      "maroon": "#e08090",
+      "teal": "#7ad7c8"
+    }
+  }
+}
