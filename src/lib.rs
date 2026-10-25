@@ -3,6 +3,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+/// Where the encoded ring lies until an otkat is saved from it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RingPlace {
+    /// The ring stays in memory. This is the place until the person chooses disk.
+    Memory,
+}
+
 /// The key combination that asks the ring to save an otkat.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bind {
@@ -199,6 +206,23 @@ impl Ring {
     /// `otkat_folder` is where a saved otkat is written.
     pub fn new(otkat_folder: impl Into<PathBuf>) -> Self {
         Self::with_clock(otkat_folder, system_bind_day)
+    }
+
+    /// `home` roots the ring folder when the place is disk.
+    /// [`Ring::new`] uses the process home. A new ring stays in memory.
+    pub fn with_home(otkat_folder: impl Into<PathBuf>, home: impl Into<PathBuf>) -> Self {
+        let _home = home.into();
+        Self::new(otkat_folder)
+    }
+
+    /// Where the encoded ring lies. A new ring is in memory.
+    pub fn place(&self) -> RingPlace {
+        RingPlace::Memory
+    }
+
+    /// The folder that holds the encoded ring when the place is disk.
+    pub fn ring_folder(&self) -> Option<&Path> {
+        None
     }
 
     /// `clock` answers the bind day. [`Ring::new`] uses the local calendar day.
