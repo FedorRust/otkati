@@ -22,4 +22,22 @@ TestCase {
         face.setTheme("#aabbcc")
         compare(face.plashkaColor, "#aabbcc")
     }
+
+    function test_each_bind_shows_the_success_plashka_immediately() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.setTheme("#336699")
+
+        face.showPlashka(Face.PlashkaEvent.Saved)
+        compare(face.visible, true)
+        compare(face.plashkaEvent, Face.PlashkaEvent.Saved)
+        compare(face.plashkaColor, "#336699")
+        compare(face.plashkaText, "")
+
+        face.showPlashka(Face.PlashkaEvent.Saved)
+        compare(face.visible, true)
+        compare(face.plashkaEvent, Face.PlashkaEvent.Saved)
+        compare(face.plashkaColor, "#336699")
+        compare(face.plashkaText, "")
+    }
 }

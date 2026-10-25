@@ -1,8 +1,11 @@
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use otkati::{BindDay, PlashkaEvent, Ring};
 
@@ -131,4 +134,139 @@ fn two_otkats_in_the_queue_take_adjacent_numbers() {
         mp4_duration_secs(&folder.path.join("otkat12-2026-10-25.mp4")),
         15
     );
+}
+
+/// Holds the file writer inside one write until the test lets it finish.
+struct OpenWrite {
+    entered: Mutex<usize>,
+    entered_cv: Condvar,
+    permits: Mutex<usize>,
+    permits_cv: Condvar,
+    in_flight: AtomicUsize,
+    max_in_flight: AtomicUsize,
+}
+
+impl OpenWrite {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            entered: Mutex::new(0),
+            entered_cv: Condvar::new(),
+            permits: Mutex::new(0),
+            permits_cv: Condvar::new(),
+            in_flight: AtomicUsize::new(0),
+            max_in_flight: AtomicUsize::new(0),
+        })
+    }
+
+    fn writer(
+        self: &Arc<Self>,
+    ) -> impl Fn(&Path, Duration) -> io::Result<()> + Send + Sync + 'static {
+        let gate = Arc::clone(self);
+        move |path, duration| {
+            let now = gate.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+            gate.max_in_flight.fetch_max(now, Ordering::SeqCst);
+            {
+                let mut entered = gate.entered.lock().unwrap();
+                *entered += 1;
+                gate.entered_cv.notify_all();
+            }
+            {
+                let mut permits = gate.permits.lock().unwrap();
+                while *permits == 0 {
+                    permits = gate.permits_cv.wait(permits).unwrap();
+                }
+                *permits -= 1;
+            }
+            fs::write(path, duration.as_secs().to_string())?;
+            gate.in_flight.fetch_sub(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    fn wait_until_entered(&self, count: usize) {
+        let mut entered = self.entered.lock().unwrap();
+        while *entered < count {
+            entered = self.entered_cv.wait(entered).unwrap();
+        }
+    }
+
+    fn entered_within(&self, count: usize, limit: Duration) -> bool {
+        let start = Instant::now();
+        let mut entered = self.entered.lock().unwrap();
+        while *entered < count {
+            let left = limit.saturating_sub(start.elapsed());
+            if left.is_zero() {
+                return *entered >= count;
+            }
+            let (next, timeout) = self.entered_cv.wait_timeout(entered, left).unwrap();
+            entered = next;
+            if timeout.timed_out() && *entered < count {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn let_one_finish(&self) {
+        let mut permits = self.permits.lock().unwrap();
+        *permits += 1;
+        self.permits_cv.notify_all();
+    }
+}
+
+#[test]
+fn a_second_bind_while_the_first_file_is_being_written_takes_the_ring_then() {
+    let folder = OtkatFolder::new();
+    let gate = OpenWrite::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.write_otkat_with(gate.writer());
+    ring.hold(Duration::from_secs(120));
+
+    let first = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &first else {
+        panic!("expected a saved otkat, got {first:?}");
+    };
+    assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
+    assert_eq!(saved.duration(), Duration::from_secs(120));
+    let first_path = folder.path.join("otkat1-2026-10-25.mp4");
+    assert!(!first_path.exists());
+
+    let first_write = thread::spawn(move || drop(first));
+    gate.wait_until_entered(1);
+
+    ring.hold(Duration::from_secs(45));
+    let second = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &second else {
+        panic!("expected a saved otkat, got {second:?}");
+    };
+    assert_eq!(saved.name(), "otkat2-2026-10-25.mp4");
+    assert_eq!(saved.duration(), Duration::from_secs(45));
+    let second_path = folder.path.join("otkat2-2026-10-25.mp4");
+    assert!(!first_path.exists());
+    assert!(
+        !second_path.exists(),
+        "the success plashka comes out before the file is in the folder"
+    );
+
+    let second_write = thread::spawn(move || drop(second));
+    assert!(
+        !gate.entered_within(2, Duration::from_millis(200)),
+        "the queue writes one file at a time"
+    );
+
+    gate.let_one_finish();
+    first_write.join().unwrap();
+    assert_eq!(fs::read(&first_path).unwrap(), b"120");
+    gate.wait_until_entered(2);
+    assert!(
+        !second_path.exists(),
+        "the second file waits until the first write has finished"
+    );
+    assert_eq!(gate.max_in_flight.load(Ordering::SeqCst), 1);
+
+    gate.let_one_finish();
+    second_write.join().unwrap();
+    assert_eq!(fs::read(&second_path).unwrap(), b"45");
+    assert_eq!(fs::read(&first_path).unwrap(), b"120");
+    assert_eq!(gate.max_in_flight.load(Ordering::SeqCst), 1);
 }

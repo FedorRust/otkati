@@ -141,48 +141,49 @@ impl std::fmt::Debug for PendingOtkat {
     }
 }
 
-impl PendingOtkat {
-    fn encode(&self) -> std::io::Result<()> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let seconds = self.duration.as_secs();
-        let output = Command::new("ffmpeg")
-            .arg("-y")
-            .arg("-loglevel")
-            .arg("error")
-            .arg("-f")
-            .arg("lavfi")
-            .arg("-i")
-            .arg(format!("color=c=black:s=16x16:r=1:d={seconds}"))
-            .arg("-c:v")
-            .arg("libx264")
-            .arg("-preset")
-            .arg("ultrafast")
-            .arg("-pix_fmt")
-            .arg("yuv420p")
-            .arg("-an")
-            .arg(&self.path)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .output()?;
-        if output.status.success() {
-            Ok(())
-        } else {
-            let detail = String::from_utf8_lossy(&output.stderr);
-            Err(std::io::Error::other(format!(
-                "ffmpeg exited with {}: {detail}",
-                output.status
-            )))
-        }
+fn encode_mp4(path: &Path, duration: Duration) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let seconds = duration.as_secs();
+    let output = Command::new("ffmpeg")
+        .arg("-y")
+        .arg("-loglevel")
+        .arg("error")
+        .arg("-f")
+        .arg("lavfi")
+        .arg("-i")
+        .arg(format!("color=c=black:s=16x16:r=1:d={seconds}"))
+        .arg("-c:v")
+        .arg("libx264")
+        .arg("-preset")
+        .arg("ultrafast")
+        .arg("-pix_fmt")
+        .arg("yuv420p")
+        .arg("-an")
+        .arg(path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let detail = String::from_utf8_lossy(&output.stderr);
+        Err(std::io::Error::other(format!(
+            "ffmpeg exited with {}: {detail}",
+            output.status
+        )))
     }
 }
+
+type OtkatWriter = Arc<dyn Fn(&Path, Duration) -> std::io::Result<()> + Send + Sync>;
 
 /// Otkats already taken from the ring and not yet finished as files.
 struct OtkatQueue {
     inner: Mutex<QueueInner>,
     turn: Condvar,
+    writer: Mutex<OtkatWriter>,
 }
 
 struct QueueInner {
@@ -200,6 +201,7 @@ impl OtkatQueue {
                 outstanding: BTreeSet::new(),
             }),
             turn: Condvar::new(),
+            writer: Mutex::new(Arc::new(encode_mp4)),
         }
     }
 
@@ -228,7 +230,8 @@ impl OtkatQueue {
                 inner = self.turn.wait(inner).unwrap();
             }
         }
-        let result = pending.encode();
+        let writer = Arc::clone(&self.writer.lock().unwrap());
+        let result = writer(&pending.path, pending.duration);
         {
             let mut inner = self.inner.lock().unwrap();
             inner.outstanding.remove(&pending.number);
@@ -350,6 +353,18 @@ impl Ring {
     /// Live capture from the monitor fills this in a later ticket.
     pub fn hold(&mut self, held: Duration) {
         self.held = held;
+    }
+
+    /// `write` puts one taken otkat into the folder.
+    ///
+    /// The queue calls it when that [`SavedOtkat`] is dropped, one file at a
+    /// time and in bind order. [`Ring::bind`] does not wait for it. Until this
+    /// is set, the ring writes an mp4.
+    pub fn write_otkat_with<F>(&mut self, write: F)
+    where
+        F: Fn(&Path, Duration) -> std::io::Result<()> + Send + Sync + 'static,
+    {
+        *self.queue.writer.lock().unwrap() = Arc::new(write);
     }
 
     /// The face hands the ring a new bind.
