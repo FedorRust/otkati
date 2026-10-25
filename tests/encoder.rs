@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use otkati::{Encoder, Ring};
+use otkati::{Card, Encoder, Ring};
 
 struct OtkatFolder {
     path: PathBuf,
@@ -40,4 +40,18 @@ fn a_new_machine_offers_h264_and_chooses_it() {
     let session = Ring::enter_session(folder.path.clone(), None);
     assert_eq!(session.encoder(), Encoder::H264);
     assert_eq!(session.offered_encoders(), vec![Encoder::H264]);
+}
+
+#[test]
+fn a_3060_ti_offers_h264_and_hevc_and_still_chooses_h264() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::new(folder.path.clone());
+
+    ring.see_card(Card::Nvidia3060Ti);
+
+    assert_eq!(ring.encoder(), Encoder::H264);
+    assert_eq!(
+        ring.offered_encoders(),
+        vec![Encoder::H264, Encoder::Hevc]
+    );
 }

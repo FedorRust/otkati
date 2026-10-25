@@ -18,6 +18,16 @@ pub enum Encoder {
     Av1,
 }
 
+/// The graphics card on this machine.
+///
+/// The ring uses it to say which encoder items the card can do. Seeing a card
+/// does not switch the encoder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Card {
+    /// NVIDIA GeForce RTX 3060 Ti.
+    Nvidia3060Ti,
+}
+
 /// The key combination that asks the ring to save an otkat.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bind {
@@ -193,6 +203,7 @@ pub struct Ring {
     waiting_for_screen: bool,
     screen: Option<Screen>,
     bind: Bind,
+    card: Option<Card>,
 }
 
 impl Ring {
@@ -228,6 +239,7 @@ impl Ring {
             waiting_for_screen: false,
             screen: None,
             bind: Self::default_bind(),
+            card: None,
         }
     }
 
@@ -247,6 +259,7 @@ impl Ring {
             waiting_for_screen,
             screen: remembered,
             bind: Self::default_bind(),
+            card: None,
         }
     }
 
@@ -278,11 +291,20 @@ impl Ring {
         Encoder::H264
     }
 
+    /// The card on this machine. The chosen encoder stays as it is.
+    pub fn see_card(&mut self, card: Card) {
+        self.card = Some(card);
+    }
+
     /// Encoder items this card can do, in knob order.
     ///
     /// Until the ring has seen a card, the only item is H.264.
     pub fn offered_encoders(&self) -> Vec<Encoder> {
-        vec![Encoder::H264]
+        let mut offered = vec![Encoder::H264];
+        if matches!(self.card, Some(Card::Nvidia3060Ti)) {
+            offered.push(Encoder::Hevc);
+        }
+        offered
     }
 
     /// Output sound arrived. It does not ask which screen to give.
