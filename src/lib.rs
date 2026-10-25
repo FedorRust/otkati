@@ -240,9 +240,15 @@ impl Ring {
 
     /// The face hands the ring a place.
     ///
-    /// Disk puts the encoded ring in the ring folder and creates that folder.
-    /// Nothing is written to the otkat folder.
+    /// A different place starts the ring over: minutes already held are
+    /// dropped and nothing is written to the otkat folder. The same place
+    /// leaves those minutes. Disk puts the encoded ring in the ring folder
+    /// and creates that folder.
     pub fn take_place(&mut self, place: RingPlace) {
+        if self.ring_place == place {
+            return;
+        }
+        self.held = Duration::ZERO;
         self.ring_place = place;
         if place == RingPlace::Disk {
             if let Err(err) = fs::create_dir_all(&self.ring_folder) {
