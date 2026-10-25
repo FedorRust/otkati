@@ -4,6 +4,7 @@ use std::fs;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -200,6 +201,44 @@ impl Screen {
     }
 }
 
+/// A monitor that is connected.
+///
+/// `position` is where it sits, `focused` is whether it has focus, and
+/// `connector` is its connector name. The ring is told all three and does not
+/// choose a ring monitor from them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectedMonitor {
+    screen: Screen,
+    position: (i32, i32),
+    focused: bool,
+    connector: String,
+}
+
+impl ConnectedMonitor {
+    /// One connected monitor, as the capture boundary reports it.
+    ///
+    /// This is not a Wayland output. `position`, `focused`, and `connector`
+    /// do not decide the ring monitor.
+    pub fn new(
+        screen: Screen,
+        position: (i32, i32),
+        focused: bool,
+        connector: impl Into<String>,
+    ) -> Self {
+        Self {
+            screen,
+            position,
+            focused,
+            connector: connector.into(),
+        }
+    }
+
+    /// The screen this connected monitor is.
+    pub fn screen(&self) -> &Screen {
+        &self.screen
+    }
+}
+
 /// A moment of one monitor handed to the ring.
 ///
 /// This is the capture boundary's report of that monitor. It is not a
@@ -276,6 +315,8 @@ pub enum PlashkaEvent {
     FolderNotCreated,
     /// The disk has no space, so no finished otkat is written.
     NoSpace,
+    /// The write broke after the success plashka, so the unfinished file is removed.
+    ClipDidNotSave,
     /// The ring is off, so the bind saves nothing.
     RingOff,
 }
@@ -287,6 +328,7 @@ impl PartialEq for PlashkaEvent {
             (Self::NoAccess, Self::NoAccess) => true,
             (Self::FolderNotCreated, Self::FolderNotCreated) => true,
             (Self::NoSpace, Self::NoSpace) => true,
+            (Self::ClipDidNotSave, Self::ClipDidNotSave) => true,
             (Self::RingOff, Self::RingOff) => true,
             (Self::Saved(left), Self::Saved(right)) => {
                 left.name == right.name && left.duration == right.duration
@@ -511,6 +553,7 @@ struct OtkatQueue {
     inner: Mutex<QueueInner>,
     turn: Condvar,
     writer: Mutex<OtkatWriter>,
+    later_plashka: mpsc::Sender<PlashkaEvent>,
 }
 
 struct QueueInner {
@@ -520,16 +563,21 @@ struct QueueInner {
 }
 
 impl OtkatQueue {
-    fn new() -> Self {
-        Self {
-            inner: Mutex::new(QueueInner {
-                next_ticket: 1,
-                next_to_write: 1,
-                outstanding: BTreeSet::new(),
-            }),
-            turn: Condvar::new(),
-            writer: Mutex::new(Arc::new(encode_mp4)),
-        }
+    fn new() -> (Self, mpsc::Receiver<PlashkaEvent>) {
+        let (later_plashka, later_plashki) = mpsc::channel();
+        (
+            Self {
+                inner: Mutex::new(QueueInner {
+                    next_ticket: 1,
+                    next_to_write: 1,
+                    outstanding: BTreeSet::new(),
+                }),
+                turn: Condvar::new(),
+                writer: Mutex::new(Arc::new(encode_mp4)),
+                later_plashka,
+            },
+            later_plashki,
+        )
     }
 
     /// The next number, counting files already in the folder and otkats
@@ -569,14 +617,17 @@ impl OtkatQueue {
             pending.microphone,
             pending.frames_per_second,
         );
+        if let Err(err) = result {
+            // The next otkat starts only after this file is gone.
+            let _ = fs::remove_file(&pending.path);
+            let _ = self.later_plashka.send(PlashkaEvent::ClipDidNotSave);
+            eprintln!("otkat was not written: {err}");
+        }
         {
             let mut inner = self.inner.lock().unwrap();
             inner.outstanding.remove(&pending.number);
             inner.next_to_write += 1;
             self.turn.notify_all();
-        }
-        if let Err(err) = result {
-            eprintln!("otkat was not written: {err}");
         }
     }
 }
@@ -614,6 +665,7 @@ pub struct Ring {
     resolution_share: ResolutionShare,
     bitrate: Bitrate,
     queue: Arc<OtkatQueue>,
+    later_plashki: mpsc::Receiver<PlashkaEvent>,
     card: Option<Card>,
     encoder: Encoder,
     switch: Switch,
@@ -691,6 +743,7 @@ impl Ring {
         otkat_folder: impl Into<PathBuf>,
         clock: impl Fn() -> BindDay + Send + 'static,
     ) -> Self {
+        let (queue, later_plashki) = OtkatQueue::new();
         Self {
             otkat_folder: otkat_folder.into(),
             held: Duration::ZERO,
@@ -704,7 +757,8 @@ impl Ring {
             ring_folder: ring_folder_under(&home_dir()),
             resolution_share: ResolutionShare::default(),
             bitrate: Bitrate::default(),
-            queue: Arc::new(OtkatQueue::new()),
+            queue: Arc::new(queue),
+            later_plashki,
             card: None,
             encoder: Encoder::H264,
             switch: Switch::On,
@@ -720,6 +774,7 @@ impl Ring {
     /// monitor.
     pub fn enter_session(otkat_folder: impl Into<PathBuf>, remembered: Option<Screen>) -> Self {
         let waiting_for_screen = remembered.is_none();
+        let (queue, later_plashki) = OtkatQueue::new();
         Self {
             otkat_folder: otkat_folder.into(),
             held: Duration::ZERO,
@@ -733,7 +788,8 @@ impl Ring {
             ring_folder: ring_folder_under(&home_dir()),
             resolution_share: ResolutionShare::default(),
             bitrate: Bitrate::default(),
-            queue: Arc::new(OtkatQueue::new()),
+            queue: Arc::new(queue),
+            later_plashki,
             card: None,
             encoder: Encoder::H264,
             switch: Switch::On,
@@ -758,9 +814,65 @@ impl Ring {
     /// and does not become the ring's monitor.
     pub fn offer_screen(&mut self, _screen: Screen) {}
 
-    /// The ring's monitor: the screen from the person's answer.
+    /// The ring's monitor: the screen the person chose.
+    ///
+    /// The first choice is the screen answer. A later choice in settings
+    /// replaces it. The program does not fill this from position, focus, or
+    /// a connector name.
     pub fn monitor(&self) -> Option<&Screen> {
         self.screen.as_ref()
+    }
+
+    /// Which monitors are connected.
+    ///
+    /// Position, focus, and connector name do not choose the ring monitor.
+    /// A monitor at `0x0`, the focused monitor, or a connector such as `DP-1`
+    /// stays out unless the person chose it. When the person has not chosen,
+    /// none of these becomes the ring monitor. When the chosen monitor is
+    /// disconnected and one monitor remains, the ring moves to that one and
+    /// keeps the minutes it already held.
+    pub fn see_connected_monitors(&mut self, monitors: &[ConnectedMonitor]) {
+        for monitor in monitors {
+            let _position = monitor.position;
+            let _focused = monitor.focused;
+            let _connector = monitor.connector.as_str();
+        }
+        let Some(chosen) = self.screen.clone() else {
+            return;
+        };
+        if monitors
+            .iter()
+            .any(|monitor| monitor.screen.name() == chosen.name())
+        {
+            return;
+        }
+        if monitors.len() == 1 {
+            self.move_to(monitors[0].screen.clone());
+        }
+    }
+
+    /// The face hands the ring the monitor the person chose in settings.
+    ///
+    /// The ring moves to that screen. Minutes already held stay with it, and
+    /// a moment of another monitor stays out. Nothing is written to the otkat
+    /// folder.
+    pub fn take_ring_monitor(&mut self, screen: Screen) {
+        self.move_to(screen);
+    }
+
+    fn move_to(&mut self, screen: Screen) {
+        if self
+            .screen
+            .as_ref()
+            .is_some_and(|current| current.name() == screen.name())
+        {
+            return;
+        }
+        self.waiting_for_screen = false;
+        self.screen = Some(screen.clone());
+        if let Some(segment) = self.segment.as_mut() {
+            segment.monitor = screen;
+        }
     }
 
     /// The encoder the ring is using. A new machine uses H.264.
@@ -876,6 +988,15 @@ impl Ring {
         self.held = held;
     }
 
+    /// A plashka that arrived after [`Ring::bind`] has already answered.
+    ///
+    /// The success plashka is the value [`Ring::bind`] returned at the press.
+    /// A write that breaks after that leaves [`PlashkaEvent::ClipDidNotSave`]
+    /// here. Each call takes one such plashka.
+    pub fn later_plashka(&self) -> Option<PlashkaEvent> {
+        self.later_plashki.try_recv().ok()
+    }
+
     /// `write` puts one taken otkat into the folder.
     ///
     /// The queue calls it when that [`SavedOtkat`] is dropped, one file at a
@@ -963,9 +1084,12 @@ impl Ring {
     /// has no free space, answers with [`PlashkaEvent::NoSpace`]. None of those
     /// creates a file. A ring that holds frames, can use the folder, and has
     /// room answers with [`PlashkaEvent::Saved`]; the file is written when that
-    /// value is dropped. The answer does not wait for an earlier file that is
-    /// still being written. That otkat keeps the ring as it is at this bind and
-    /// waits in the queue.
+    /// value is dropped. If that write breaks, the unfinished file is removed
+    /// and [`PlashkaEvent::ClipDidNotSave`] is left for [`Ring::later_plashka`].
+    /// That is a different plashka from [`PlashkaEvent::NoSpace`], which is the
+    /// answer when the disk is already full at the press. The answer does not
+    /// wait for an earlier file that is still being written. That otkat keeps
+    /// the ring as it is at this bind and waits in the queue.
     pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
         if chord != self.bind {
             return None;
