@@ -198,3 +198,34 @@ fn a_ring_past_the_chosen_length_saves_ten_minutes() {
         600
     );
 }
+
+#[test]
+fn the_otkat_folder_is_created_when_the_file_is_written() {
+    let parent = OtkatFolder::new();
+    let path = parent.path.join("Откаты");
+    assert!(!path.exists());
+    let mut ring = Ring::with_clock(&path, || BindDay::new(2026, 10, 25));
+    ring.hold(Duration::from_secs(120));
+
+    let event = ring.bind();
+    assert!(
+        !path.exists(),
+        "the folder appears with the file, after the plashka"
+    );
+    drop(event);
+
+    let file = path.join("otkat1-2026-10-25.mp4");
+    assert_eq!(mp4_duration_secs(&file), 120);
+}
+
+#[test]
+fn an_empty_ring_does_not_create_the_otkat_folder() {
+    let parent = OtkatFolder::new();
+    let path = parent.path.join("Откаты");
+    let mut ring = Ring::new(&path);
+
+    let event = ring.bind();
+
+    assert_eq!(event, PlashkaEvent::NothingToSave);
+    assert!(!path.exists());
+}

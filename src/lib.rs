@@ -101,6 +101,9 @@ struct PendingOtkat {
 
 impl PendingOtkat {
     fn write(self) -> std::io::Result<()> {
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent)?;
+        }
         let seconds = self.duration.as_secs();
         let output = Command::new("ffmpeg")
             .arg("-y")
