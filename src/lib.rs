@@ -276,12 +276,17 @@ impl Ring {
 
     /// The face hands the ring the length it aims to hold.
     ///
-    /// A length outside 15 seconds through 20 minutes leaves the aim unchanged.
+    /// The length is a whole number of seconds from 15 through 20 minutes.
+    /// Anything else leaves the aim unchanged.
     pub fn take_length(&mut self, length: Duration) {
-        if length < Duration::from_secs(15) || length > Duration::from_secs(20 * 60) {
+        if length.subsec_nanos() != 0 {
             return;
         }
-        self.chosen_length = length;
+        let seconds = length.as_secs();
+        if !(15..=20 * 60).contains(&seconds) {
+            return;
+        }
+        self.chosen_length = Duration::from_secs(seconds);
     }
 
     /// The face hands the ring a new bind.
