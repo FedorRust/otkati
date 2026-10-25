@@ -7,6 +7,9 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+mod session;
+pub use session::{HyprlandSession, SessionAutostart};
+
 /// Where the encoded ring lies until an otkat is saved from it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RingPlace {

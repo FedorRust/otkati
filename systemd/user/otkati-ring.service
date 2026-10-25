@@ -1,0 +1,11 @@
+[Unit]
+Description=Otkati ring
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=otkati-ring
+
+[Install]
+WantedBy=graphical-session.target
