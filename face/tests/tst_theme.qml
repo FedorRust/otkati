@@ -263,4 +263,50 @@ TestCase {
         compare(face.themeColors.text, "#abcabc")
         compare(face.themeColors.blue, "#445566")
     }
+
+    function homeDirectory() {
+        let url = StandardPaths.writableLocation(StandardPaths.HomeLocation).toString()
+        if (url.startsWith("file://"))
+            url = decodeURIComponent(url.slice("file://".length))
+        return url
+    }
+
+    function test_the_face_reads_the_installed_serpantinum_themes() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        const home = homeDirectory()
+        compare(face.cataloguePath, home + "/.local/share/serpantinum/src/assets/themes")
+        compare(face.userCataloguePath, home + "/.local/state/serpantinum/themes")
+        compare(face.shellSettingsPath, home + "/.config/serpantinum/settings.json")
+        compare(face.matugenColorsPath, home + "/.local/state/serpantinum/qs_matugen_colors.json")
+        compare(face.themeStorePath, home + "/.local/state/otkati/theme.json")
+
+        face.themeStorePath = freshStore()
+        face.shellSettingsPath = filePath("shell-north.json")
+        face.matugenColorsPath = filePath("matugen-colors.json")
+        face.userCataloguePath = ""
+        face.openSettings()
+        verify(face.readyThemes.indexOf("Mocha") >= 0)
+        verify(face.readyThemes.indexOf("Matugen") >= 0)
+        verify(face.readyThemes.indexOf("Nightfox") < 0)
+
+        face.setTheme("Mocha")
+        compare(face.themeName, "Mocha")
+        compare(face.settingsColor, "#1e1e2e")
+        compare(face.settingsTextColor, "#cdd6f4")
+        compare(face.themeColors.text, "#cdd6f4")
+        compare(face.themeColors.blue, "#89b4fa")
+    }
+
+    function test_a_serpantinum_user_theme_is_a_ready_made_choice() {
+        const face = faceOn("shell-north.json", freshStore())
+        face.userCataloguePath = filePath("user-themes")
+        face.openSettings()
+        compare(face.readyThemes.join(","), "Cabin,Matugen,North,South")
+        face.setTheme("Cabin")
+        compare(face.themeName, "Cabin")
+        compare(face.settingsColor, "#303030")
+        compare(face.themeColors.text, "#eeeeee")
+        compare(face.themeColors.blue, "#3333cc")
+    }
 }

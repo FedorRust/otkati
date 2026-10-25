@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Window
+import QtCore
 import Otkati.Files 1.0
 
 Window {
@@ -25,10 +26,17 @@ Window {
 
     property color themeColor: "#000000"
     property string language: "en"
-    property string cataloguePath: ""
-    property string shellSettingsPath: ""
-    property string matugenColorsPath: ""
-    property string themeStorePath: ""
+    readonly property string homePath: {
+        let url = StandardPaths.writableLocation(StandardPaths.HomeLocation).toString()
+        if (url.startsWith("file://"))
+            url = decodeURIComponent(url.slice("file://".length))
+        return url
+    }
+    property string cataloguePath: homePath + "/.local/share/serpantinum/src/assets/themes"
+    property string userCataloguePath: homePath + "/.local/state/serpantinum/themes"
+    property string shellSettingsPath: homePath + "/.config/serpantinum/settings.json"
+    property string matugenColorsPath: homePath + "/.local/state/serpantinum/qs_matugen_colors.json"
+    property string themeStorePath: homePath + "/.local/state/otkati/theme.json"
     property string themeName: ""
     property var themeColors: ({})
     property var readyThemes: []
@@ -66,8 +74,19 @@ Window {
         return false
     }
 
+    function catalogueFiles() {
+        const paths = []
+        const system = Files.jsonFiles(cataloguePath)
+        const user = Files.jsonFiles(userCataloguePath)
+        for (let i = 0; i < system.length; i++)
+            paths.push(system[i])
+        for (let i = 0; i < user.length; i++)
+            paths.push(user[i])
+        return paths
+    }
+
     function loadCatalogue() {
-        const paths = Files.jsonFiles(cataloguePath)
+        const paths = catalogueFiles()
         const names = []
         const byName = {}
         for (let i = 0; i < paths.length; i++) {
