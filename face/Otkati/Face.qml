@@ -13,6 +13,7 @@ Window {
     }
 
     property color themeColor: "#000000"
+    property string language: "en"
     readonly property alias plashkaText: label.text
     readonly property alias plashkaColor: background.color
 
@@ -20,10 +21,22 @@ Window {
         themeColor = color
     }
 
+    function setLanguage(next) {
+        language = next
+        if (visible)
+            label.text = nothingToSaveText()
+    }
+
+    function nothingToSaveText() {
+        if (language === "ru")
+            return "Сохранять нечего"
+        return "Nothing to save"
+    }
+
     function showPlashka(event) {
         if (event !== Face.PlashkaEvent.NothingToSave)
             return
-        label.text = "Nothing to save"
+        label.text = nothingToSaveText()
         visible = true
         hideTimer.restart()
     }

@@ -52,4 +52,13 @@ TestCase {
         face.requestActivate()
         compare(face.active, false)
     }
+
+    function test_empty_ring_plashka_stays_english_until_the_language_changes() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.showPlashka(Face.PlashkaEvent.NothingToSave)
+        compare(face.plashkaText, "Nothing to save")
+        face.setLanguage("ru")
+        compare(face.plashkaText, "Сохранять нечего")
+    }
 }
