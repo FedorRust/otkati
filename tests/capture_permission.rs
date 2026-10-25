@@ -34,9 +34,9 @@ fn bind_before_the_screen_answer_reports_no_access_and_writes_no_file() {
     let folder = OtkatFolder::new();
     let mut ring = Ring::enter_session(folder.path.clone(), None);
 
-    let event = ring.bind();
+    let event = ring.bind(Ring::default_bind());
 
-    assert_eq!(event, PlashkaEvent::NoAccess);
+    assert_eq!(event, Some(PlashkaEvent::NoAccess));
     let written: Vec<_> = fs::read_dir(&folder.path).unwrap().collect();
     assert!(
         written.is_empty(),
@@ -52,7 +52,10 @@ fn until_the_person_answers_the_offered_screen_stays_out_of_the_ring() {
     ring.offer_screen(Screen::new("Alexey's screen"));
 
     assert!(ring.monitor().is_none());
-    assert_eq!(ring.bind(), PlashkaEvent::NoAccess);
+    assert_eq!(
+        ring.bind(Ring::default_bind()),
+        Some(PlashkaEvent::NoAccess)
+    );
     let written: Vec<_> = fs::read_dir(&folder.path).unwrap().collect();
     assert!(
         written.is_empty(),
@@ -82,9 +85,9 @@ fn a_remembered_screen_with_no_frame_still_reports_nothing_to_save() {
     let screen = Screen::new("Alexey's screen");
     let mut ring = Ring::enter_session(folder.path.clone(), Some(screen));
 
-    let event = ring.bind();
+    let event = ring.bind(Ring::default_bind());
 
-    assert_eq!(event, PlashkaEvent::NothingToSave);
+    assert_eq!(event, Some(PlashkaEvent::NothingToSave));
     let written: Vec<_> = fs::read_dir(&folder.path).unwrap().collect();
     assert!(
         written.is_empty(),
@@ -115,5 +118,8 @@ fn output_sound_and_microphone_do_not_answer_the_screen_question() {
 
     assert!(ring.asks_which_screen());
     assert!(ring.monitor().is_none());
-    assert_eq!(ring.bind(), PlashkaEvent::NoAccess);
+    assert_eq!(
+        ring.bind(Ring::default_bind()),
+        Some(PlashkaEvent::NoAccess)
+    );
 }

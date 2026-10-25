@@ -34,9 +34,9 @@ fn bind_on_an_empty_ring_yields_a_plashka_and_writes_no_otkat() {
     let folder = OtkatFolder::new();
     let mut ring = Ring::new(folder.path.clone());
 
-    let event = ring.bind();
+    let event = ring.bind(Ring::default_bind());
 
-    assert_eq!(event, PlashkaEvent::NothingToSave);
+    assert_eq!(event, Some(PlashkaEvent::NothingToSave));
     let written: Vec<_> = fs::read_dir(&folder.path).unwrap().collect();
     assert!(
         written.is_empty(),

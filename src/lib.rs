@@ -1,15 +1,20 @@
 use std::path::PathBuf;
 
 /// The key combination that asks the ring to save an otkat.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bind {
-    text: &'static str,
+    text: String,
 }
 
 impl Bind {
+    /// A bind written the way a person sets it, for example `Alt+Z`.
+    pub fn new(text: impl Into<String>) -> Self {
+        Self { text: text.into() }
+    }
+
     /// How the bind is written, for example `Alt+Z`.
-    pub fn text(self) -> &'static str {
-        self.text
+    pub fn text(&self) -> &str {
+        &self.text
     }
 }
 
@@ -42,18 +47,20 @@ impl Screen {
 
 /// Encoded seconds the ring holds, and the bind that asks to save an otkat.
 ///
-/// A newly created ring holds no frame. A session entered with no remembered
+/// A newly created ring holds no frame and listens for [`Ring::default_bind`]
+/// until the face hands it a new one. A session entered with no remembered
 /// screen is still waiting for the person's answer.
 pub struct Ring {
     otkat_folder: PathBuf,
     waiting_for_screen: bool,
     screen: Option<Screen>,
+    bind: Bind,
 }
 
 impl Ring {
     /// The bind a new ring listens for, before anyone changes it.
     pub fn default_bind() -> Bind {
-        Bind { text: "Alt+Z" }
+        Bind::new("Alt+Z")
     }
 
     /// `otkat_folder` is where a saved otkat would be written.
@@ -62,13 +69,14 @@ impl Ring {
             otkat_folder: otkat_folder.into(),
             waiting_for_screen: false,
             screen: None,
+            bind: Self::default_bind(),
         }
     }
 
     /// Enter a session.
     ///
     /// `remembered` is the screen kept from an earlier answer. Without one,
-    /// the session is waiting for the person: a bind reports
+    /// the session is waiting for the person: the ring's bind reports
     /// [`PlashkaEvent::NoAccess`] and writes no otkat. The next entry that
     /// receives that screen does not ask again, and the screen is the ring's
     /// monitor.
@@ -78,6 +86,7 @@ impl Ring {
             otkat_folder: otkat_folder.into(),
             waiting_for_screen,
             screen: remembered,
+            bind: Self::default_bind(),
         }
     }
 
@@ -110,17 +119,29 @@ impl Ring {
     /// The microphone arrived. It does not ask which screen to give.
     pub fn microphone(&mut self) {}
 
-    /// The bind was pressed.
+    /// The face hands the ring a new bind.
     ///
-    /// An empty ring answers with [`PlashkaEvent::NothingToSave`] and does not
-    /// create a file in the otkat folder. A session still waiting for the
-    /// person's screen answers with [`PlashkaEvent::NoAccess`] and does not
-    /// create a file either.
-    pub fn bind(&mut self) -> PlashkaEvent {
+    /// The ring saves on that chord, and the previous chord no longer does.
+    /// No Hyprland config is read or written.
+    pub fn take_bind(&mut self, bind: Bind) {
+        self.bind = bind;
+    }
+
+    /// `chord` reached the ring.
+    ///
+    /// When it is not the ring's bind, nothing is saved. When it is, and the
+    /// session is still waiting for the person's screen, answers with
+    /// [`PlashkaEvent::NoAccess`]. When it is, and the ring holds no frame,
+    /// answers with [`PlashkaEvent::NothingToSave`]. Neither case creates a
+    /// file in the otkat folder.
+    pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
+        if chord != self.bind {
+            return None;
+        }
         let _ = &self.otkat_folder;
         if self.waiting_for_screen {
-            return PlashkaEvent::NoAccess;
+            return Some(PlashkaEvent::NoAccess);
         }
-        PlashkaEvent::NothingToSave
+        Some(PlashkaEvent::NothingToSave)
     }
 }
