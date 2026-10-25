@@ -196,3 +196,21 @@ fn an_rx_7000_offers_av1_and_the_otkat_stays_mp4() {
     };
     assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
 }
+
+#[test]
+fn an_rx_7000_that_cannot_do_hevc_still_offers_av1() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::new(folder.path.clone());
+    ring.see_card(Card::Amd {
+        hevc: false,
+        rx_7000: true,
+    });
+
+    assert_eq!(ring.encoder(), Encoder::H264);
+    assert_eq!(ring.offered_encoders(), vec![Encoder::H264, Encoder::Av1]);
+
+    ring.take_encoder(Encoder::Hevc);
+    assert_eq!(ring.encoder(), Encoder::H264);
+    ring.take_encoder(Encoder::Av1);
+    assert_eq!(ring.encoder(), Encoder::Av1);
+}
