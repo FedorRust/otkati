@@ -60,4 +60,23 @@ TestCase {
         compare(face.settingLabel("otkatFolder"), "Otkat folder")
         compare(face.plashkaText, "Nothing to save")
     }
+
+    function test_shell_language_including_serpantinum_is_not_copied() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+
+        face.setShellLanguage(Qt.locale().name)
+        face.setSerpantinumLanguage("ru")
+        compare(face.language, "en")
+        compare(face.settingLabel("language"), "Language")
+        face.showPlashka(Face.PlashkaEvent.NothingToSave)
+        compare(face.plashkaText, "Nothing to save")
+
+        face.chooseLanguage("ru")
+        face.setShellLanguage("en")
+        face.setSerpantinumLanguage("en")
+        compare(face.language, "ru")
+        compare(face.settingLabel("language"), "Язык")
+        compare(face.plashkaText, "Сохранять нечего")
+    }
 }

@@ -14,6 +14,9 @@ Window {
 
     property color themeColor: "#000000"
     property string language: "en"
+    // Reported by the shell. The program language does not follow either value.
+    property string shellLanguage: ""
+    property string serpantinumLanguage: ""
     readonly property alias plashkaText: label.text
     readonly property alias plashkaColor: background.color
 
@@ -25,6 +28,14 @@ Window {
         language = next
         if (visible)
             label.text = nothingToSaveText()
+    }
+
+    function setShellLanguage(next) {
+        shellLanguage = next
+    }
+
+    function setSerpantinumLanguage(next) {
+        serpantinumLanguage = next
     }
 
     function nothingToSaveText() {
