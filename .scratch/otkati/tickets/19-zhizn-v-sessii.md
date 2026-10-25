@@ -4,8 +4,12 @@
 
 **Blocked by:** 04 — Живое кольцо
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] После входа в сессию Hyprland кольцо уже запущено
-- [ ] Перезапуск Serpantinum не завершает процесс кольца
-- [ ] Минуты, которые кольцо уже держит, после перезапуска оболочки всё ещё сохраняются биндом
+- [x] После входа в сессию Hyprland кольцо уже запущено
+- [x] Перезапуск Serpantinum не завершает процесс кольца
+- [x] Минуты, которые кольцо уже держит, после перезапуска оболочки всё ещё сохраняются биндом
+
+## Comments
+
+Resolved on `otkati` by merge `98625435dc249278c0ea9107e775f644d78cc4f9`. The ring starts from `systemd/user/otkati-ring.service`, not as a child of the shell.
