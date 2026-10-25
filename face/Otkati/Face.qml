@@ -17,7 +17,8 @@ Window {
         Ordinary,
         Saved,
         ClipNotSaved,
-        NoAccess
+        NoAccess,
+        RingOff
     }
 
     enum RingPlace {
@@ -57,6 +58,8 @@ Window {
     property string bind: "Alt+Z"
     // The ring place the face hands to the ring. Memory until the person chooses disk.
     property int ringPlace: Face.RingPlace.Memory
+    // The switch the face hands to the ring. On until the person turns the ring off.
+    property bool ringOn: true
     // Reported by the shell. The program language does not follow either value.
     property string shellLanguage: ""
     property string serpantinumLanguage: ""
@@ -236,6 +239,10 @@ Window {
         ringPlace = place
     }
 
+    function setSwitch(gathering) {
+        ringOn = gathering
+    }
+
     function setShellLanguage(next) {
         shellLanguage = next
     }
@@ -335,6 +342,7 @@ Window {
         return event === Face.PlashkaEvent.Ordinary
                 || event === Face.PlashkaEvent.Saved
                 || event === Face.PlashkaEvent.NoAccess
+                || event === Face.PlashkaEvent.RingOff
     }
 
     function showPlashka(event) {
