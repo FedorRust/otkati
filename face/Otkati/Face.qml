@@ -19,6 +19,11 @@ Window {
     property string language: "en"
     // The bind the face hands to the ring. Alt+Z until the person changes it.
     property string bind: "Alt+Z"
+    // Percent of each side of the ring monitor. 100 until the person changes it.
+    property int resolutionShare: 100
+    // Picture bitrate in Mbit/s. 25 until the person changes it.
+    // It does not follow the resolution share. There is no audio-quality knob.
+    property int bitrate: 25
     // Reported by the shell. The program language does not follow either value.
     property string shellLanguage: ""
     property string serpantinumLanguage: ""
