@@ -125,9 +125,24 @@ Window {
         Text { id: resolutionShareLabel; text: root.language === "ru" ? "Доля разрешения" : "Resolution share" }
         Text { id: bitrateLabel; text: root.language === "ru" ? "Битрейт" : "Bitrate" }
         Text { id: encoderLabel; text: root.language === "ru" ? "Кодировщик" : "Encoder" }
-        Text { id: h264Mark; text: "NVIDIA, AMD, Intel, and machines with no hardware encoder" }
-        Text { id: hevcMark; text: "NVIDIA, including the 3060 Ti and 3070 Ti, and AMD or Intel when the card can do HEVC" }
-        Text { id: av1Mark; text: "NVIDIA from the 40 series and AMD from the RX 7000" }
+        Text {
+            id: h264Mark
+            text: root.language === "ru"
+                  ? "NVIDIA, AMD, Intel и компьютеры без аппаратного кодировщика"
+                  : "NVIDIA, AMD, Intel, and machines with no hardware encoder"
+        }
+        Text {
+            id: hevcMark
+            text: root.language === "ru"
+                  ? "NVIDIA, включая 3060 Ti и 3070 Ti, и AMD или Intel, если карта умеет HEVC"
+                  : "NVIDIA, including the 3060 Ti and 3070 Ti, and AMD or Intel when the card can do HEVC"
+        }
+        Text {
+            id: av1Mark
+            text: root.language === "ru"
+                  ? "NVIDIA с 40-й серии и AMD с RX 7000"
+                  : "NVIDIA from the 40 series and AMD from the RX 7000"
+        }
         Text { id: ringPlaceLabel; text: root.language === "ru" ? "Место кольца" : "Ring place" }
         Text { id: ringMonitorLabel; text: root.language === "ru" ? "Монитор кольца" : "Ring monitor" }
         Text { id: bindLabel; text: root.language === "ru" ? "Бинд" : "Bind" }
