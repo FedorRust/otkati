@@ -19,6 +19,8 @@ Window {
     property string language: "en"
     // The bind the face hands to the ring. Alt+Z until the person changes it.
     property string bind: "Alt+Z"
+    // The length, in seconds, the face hands to the ring. Ten minutes until the person changes it.
+    property int length: 600
     // Reported by the shell. The program language does not follow either value.
     property string shellLanguage: ""
     property string serpantinumLanguage: ""
