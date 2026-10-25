@@ -70,3 +70,23 @@ fn an_otkat_is_not_longer_than_the_chosen_length() {
         15
     );
 }
+
+#[test]
+fn an_unfilled_ring_saves_what_it_holds_without_empty_seconds() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.take_length(Duration::from_secs(1200));
+    ring.hold(Duration::from_secs(601));
+
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.duration(), Duration::from_secs(601));
+    drop(event);
+
+    assert_eq!(
+        mp4_duration_secs(&folder.path.join("otkat1-2026-10-25.mp4")),
+        601
+    );
+}
