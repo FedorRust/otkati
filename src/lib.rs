@@ -14,6 +14,42 @@ pub enum RingPlace {
     Disk,
 }
 
+/// How the ring compresses the picture. The person picks one item.
+///
+/// H.264 is chosen until the person switches. On a new machine it is chosen
+/// again. The ring says which of these items the card can do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Encoder {
+    /// H.264. For NVIDIA, AMD, Intel, and machines with no hardware encoder.
+    H264,
+    /// HEVC. For NVIDIA, including the 3060 Ti and 3070 Ti, and for AMD or
+    /// Intel when the card can do HEVC.
+    Hevc,
+    /// AV1. For NVIDIA from the 40 series and AMD from the RX 7000.
+    Av1,
+}
+
+/// The graphics card on this machine.
+///
+/// The ring uses it to say which encoder items the card can do. Seeing a card
+/// does not switch the encoder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Card {
+    /// NVIDIA GeForce RTX 3060 Ti.
+    Nvidia3060Ti,
+    /// NVIDIA GeForce RTX 3070 Ti.
+    Nvidia3070Ti,
+    /// NVIDIA from the 40 series on.
+    Nvidia40Series,
+    /// An AMD card. `hevc` is whether this card can do HEVC.
+    /// `rx_7000` is whether it is an RX 7000 or newer.
+    Amd { hevc: bool, rx_7000: bool },
+    /// An Intel card. `hevc` is whether this card can do HEVC.
+    Intel { hevc: bool },
+    /// This machine has no hardware encoder. H.264 stays available.
+    NoHardwareEncoder,
+}
+
 /// The key combination that asks the ring to save an otkat.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bind {
@@ -418,6 +454,8 @@ pub struct Ring {
     resolution_share: ResolutionShare,
     bitrate: Bitrate,
     queue: Arc<OtkatQueue>,
+    card: Option<Card>,
+    encoder: Encoder,
     switch: Switch,
 }
 
@@ -505,6 +543,8 @@ impl Ring {
             resolution_share: ResolutionShare::default(),
             bitrate: Bitrate::default(),
             queue: Arc::new(OtkatQueue::new()),
+            card: None,
+            encoder: Encoder::H264,
             switch: Switch::On,
         }
     }
@@ -531,6 +571,8 @@ impl Ring {
             resolution_share: ResolutionShare::default(),
             bitrate: Bitrate::default(),
             queue: Arc::new(OtkatQueue::new()),
+            card: None,
+            encoder: Encoder::H264,
             switch: Switch::On,
         }
     }
@@ -556,6 +598,43 @@ impl Ring {
     /// The ring's monitor: the screen from the person's answer.
     pub fn monitor(&self) -> Option<&Screen> {
         self.screen.as_ref()
+    }
+
+    /// The encoder the ring is using. A new machine uses H.264.
+    pub fn encoder(&self) -> Encoder {
+        self.encoder
+    }
+
+    /// The face hands the ring an encoder item.
+    ///
+    /// An item this card cannot do leaves the current encoder in place.
+    pub fn take_encoder(&mut self, encoder: Encoder) {
+        if self.offered_encoders().contains(&encoder) {
+            self.encoder = encoder;
+        }
+    }
+
+    /// The card on this machine. The chosen encoder stays as it is.
+    pub fn see_card(&mut self, card: Card) {
+        self.card = Some(card);
+    }
+
+    /// Encoder items this card can do, in knob order.
+    ///
+    /// Until the ring has seen a card, the only item is H.264. H.264 is always
+    /// offered. HEVC and AV1 follow the NVIDIA or AMD path the ring picks.
+    pub fn offered_encoders(&self) -> Vec<Encoder> {
+        let mut offered = vec![Encoder::H264];
+        let Some(card) = self.card else {
+            return offered;
+        };
+        if hevc_offered(card) {
+            offered.push(Encoder::Hevc);
+        }
+        if av1_offered(card) {
+            offered.push(Encoder::Av1);
+        }
+        offered
     }
 
     /// Output sound arrived. It does not ask which screen to give.
@@ -758,6 +837,37 @@ fn directory_accepts_a_child(path: &Path) -> bool {
     const W_OK: i32 = 2;
     const X_OK: i32 = 1;
     unsafe { access(c_path.as_ptr(), W_OK | X_OK) == 0 }
+}
+
+/// The path the ring picks from the card. The person does not choose it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum VendorPath {
+    Nvidia,
+    Amd,
+}
+
+fn vendor_path(card: Card) -> Option<VendorPath> {
+    match card {
+        Card::Nvidia3060Ti | Card::Nvidia3070Ti | Card::Nvidia40Series => Some(VendorPath::Nvidia),
+        Card::Amd { .. } => Some(VendorPath::Amd),
+        Card::Intel { .. } | Card::NoHardwareEncoder => None,
+    }
+}
+
+fn hevc_offered(card: Card) -> bool {
+    match vendor_path(card) {
+        Some(VendorPath::Nvidia) => true,
+        Some(VendorPath::Amd) => matches!(card, Card::Amd { hevc: true, .. }),
+        None => matches!(card, Card::Intel { hevc: true }),
+    }
+}
+
+fn av1_offered(card: Card) -> bool {
+    match vendor_path(card) {
+        Some(VendorPath::Nvidia) => matches!(card, Card::Nvidia40Series),
+        Some(VendorPath::Amd) => matches!(card, Card::Amd { rx_7000: true, .. }),
+        None => false,
+    }
 }
 
 fn next_otkat_number(folder: &Path) -> u32 {

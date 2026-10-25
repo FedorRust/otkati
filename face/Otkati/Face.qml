@@ -64,6 +64,11 @@ Window {
     // Picture bitrate in Mbit/s. 25 until the person changes it.
     // It does not follow the resolution share. There is no audio-quality knob.
     property int bitrate: 25
+    // The encoder the face hands to the ring. H.264 until the person switches.
+    property string encoder: "H.264"
+    readonly property var encoderItems: ["H.264", "HEVC", "AV1"]
+    // Items the ring says this card can do. H.264 until the ring says otherwise.
+    property var offeredEncoders: ["H.264"]
     // The length, in seconds, the face hands to the ring. Ten minutes until the person changes it.
     property int length: 600
     // The ring place the face hands to the ring. Memory until the person chooses disk.
@@ -291,6 +296,34 @@ Window {
         return ""
     }
 
+    function setOfferedEncoders(items) {
+        offeredEncoders = items
+    }
+
+    function encoderSelectable(item) {
+        for (let i = 0; i < offeredEncoders.length; ++i) {
+            if (offeredEncoders[i] === item)
+                return true
+        }
+        return false
+    }
+
+    function chooseEncoder(item) {
+        if (!encoderSelectable(item))
+            return
+        encoder = item
+    }
+
+    function encoderMark(item) {
+        if (item === "H.264")
+            return h264Mark.text
+        if (item === "HEVC")
+            return hevcMark.text
+        if (item === "AV1")
+            return av1Mark.text
+        return ""
+    }
+
     function settingLabel(key) {
         if (key === "length")
             return lengthLabel.text
@@ -338,6 +371,24 @@ Window {
         Text { id: resolutionShareLabel; text: root.language === "ru" ? "Доля разрешения" : "Resolution share" }
         Text { id: bitrateLabel; text: root.language === "ru" ? "Битрейт" : "Bitrate" }
         Text { id: encoderLabel; text: root.language === "ru" ? "Кодировщик" : "Encoder" }
+        Text {
+            id: h264Mark
+            text: root.language === "ru"
+                  ? "NVIDIA, AMD, Intel и компьютеры без аппаратного кодировщика"
+                  : "NVIDIA, AMD, Intel, and machines with no hardware encoder"
+        }
+        Text {
+            id: hevcMark
+            text: root.language === "ru"
+                  ? "NVIDIA, включая 3060 Ti и 3070 Ti, и AMD или Intel, если карта умеет HEVC"
+                  : "NVIDIA, including the 3060 Ti and 3070 Ti, and AMD or Intel when the card can do HEVC"
+        }
+        Text {
+            id: av1Mark
+            text: root.language === "ru"
+                  ? "NVIDIA с 40-й серии и AMD с RX 7000"
+                  : "NVIDIA from the 40 series and AMD from the RX 7000"
+        }
         Text { id: ringPlaceLabel; text: root.language === "ru" ? "Место кольца" : "Ring place" }
         Text { id: ringMonitorLabel; text: root.language === "ru" ? "Монитор кольца" : "Ring monitor" }
         Text { id: bindLabel; text: root.language === "ru" ? "Бинд" : "Bind" }

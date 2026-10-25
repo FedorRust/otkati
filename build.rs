@@ -24,7 +24,10 @@ fn main() {
 
     let moc_cpp = out_dir.join("moc_files.cpp");
     let mut moc = Command::new("/usr/lib/qt6/moc");
-    moc.args(tool_args("--cflags")).arg(&header).arg("-o").arg(&moc_cpp);
+    moc.args(tool_args("--cflags"))
+        .arg(&header)
+        .arg("-o")
+        .arg(&moc_cpp);
     let moc_status = moc.status().expect("qt6 moc");
     assert!(moc_status.success(), "moc failed");
 
@@ -42,7 +45,10 @@ fn main() {
         .arg(&plugin)
         .args(tool_args("--libs"));
     let compile_status = compile.status().expect("g++");
-    assert!(compile_status.success(), "g++ failed to build the face file plugin");
+    assert!(
+        compile_status.success(),
+        "g++ failed to build the face file plugin"
+    );
 
     println!("cargo:rerun-if-changed=face/files/files.h");
     println!("cargo:rerun-if-changed=face/files/files.cpp");
