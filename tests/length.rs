@@ -153,3 +153,35 @@ fn a_fraction_of_a_second_does_not_change_the_aim() {
         90
     );
 }
+
+#[test]
+fn changing_the_length_does_not_rewrite_a_saved_otkat() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.hold(Duration::from_secs(120));
+
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
+    assert_eq!(saved.duration(), Duration::from_secs(120));
+    ring.take_length(Duration::from_secs(15));
+    drop(event);
+
+    let path = folder.path.join("otkat1-2026-10-25.mp4");
+    assert_eq!(mp4_duration_secs(&path), 120);
+    let before = fs::read(&path).unwrap();
+    ring.take_length(Duration::from_secs(30));
+    assert_eq!(fs::read(&path).unwrap(), before);
+
+    let mut names: Vec<_> = fs::read_dir(&folder.path)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    names.sort();
+    assert_eq!(
+        names,
+        vec![std::ffi::OsString::from("otkat1-2026-10-25.mp4")]
+    );
+}
