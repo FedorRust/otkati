@@ -82,3 +82,25 @@ fn two_minutes_held_save_otkat1_for_the_bind_day() {
         vec![std::ffi::OsString::from("otkat1-2026-10-25.mp4")]
     );
 }
+
+#[test]
+fn a_missing_number_in_the_folder_is_not_reused() {
+    let folder = OtkatFolder::new();
+    fs::write(folder.path.join("otkat1-2026-10-20.mp4"), b"kept").unwrap();
+    fs::write(folder.path.join("otkat3-2026-10-24.mp4"), b"kept").unwrap();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.hold(Duration::from_secs(120));
+
+    let event = ring.bind();
+
+    let PlashkaEvent::Saved(saved) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.name(), "otkat4-2026-10-25.mp4");
+    drop(event);
+
+    assert!(folder.path.join("otkat1-2026-10-20.mp4").is_file());
+    assert!(folder.path.join("otkat3-2026-10-24.mp4").is_file());
+    assert!(folder.path.join("otkat4-2026-10-25.mp4").is_file());
+    assert!(!folder.path.join("otkat2-2026-10-25.mp4").exists());
+}

@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -183,7 +184,8 @@ impl Ring {
         }
         let day = (self.clock)();
         let duration = self.held;
-        let name = format!("otkat1-{}.mp4", day.label());
+        let number = next_otkat_number(&self.otkat_folder);
+        let name = format!("otkat{number}-{}.mp4", day.label());
         let path = self.otkat_folder.join(&name);
         PlashkaEvent::Saved(SavedOtkat {
             name,
@@ -191,6 +193,31 @@ impl Ring {
             pending: Some(PendingOtkat { path, duration }),
         })
     }
+}
+
+fn next_otkat_number(folder: &Path) -> u32 {
+    let mut highest = 0u32;
+    let Ok(entries) = fs::read_dir(folder) else {
+        return 1;
+    };
+    for entry in entries.flatten() {
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        if let Some(number) = otkat_number(&name) {
+            highest = highest.max(number);
+        }
+    }
+    highest + 1
+}
+
+fn otkat_number(name: &str) -> Option<u32> {
+    let rest = name.strip_prefix("otkat")?.strip_suffix(".mp4")?;
+    let (number, date) = rest.split_once('-')?;
+    if date.len() != 10 || number.is_empty() || !number.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    number.parse().ok()
 }
 
 fn system_bind_day() -> BindDay {
