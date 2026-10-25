@@ -45,4 +45,26 @@ TestCase {
         face.setResolutionShare(110)
         compare(face.resolutionShare, 100)
     }
+
+    function test_the_bitrate_moves_from_8_to_80_one_mbit_at_a_time() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.setBitrate(8)
+        compare(face.bitrate, 8)
+        face.setBitrate(9)
+        compare(face.bitrate, 9)
+        face.setBitrate(25)
+        compare(face.bitrate, 25)
+        face.setBitrate(80)
+        compare(face.bitrate, 80)
+        face.setBitrate(7)
+        compare(face.bitrate, 80)
+        face.setBitrate(81)
+        compare(face.bitrate, 80)
+        face.setBitrate(8.5)
+        compare(face.bitrate, 80)
+        face.setResolutionShare(50)
+        compare(face.bitrate, 80)
+        compare(face.resolutionShare, 50)
+    }
 }

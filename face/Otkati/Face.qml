@@ -61,6 +61,8 @@ Window {
     }
 
     function setBitrate(mbit) {
+        if (mbit < 8 || mbit > 80 || mbit % 1 !== 0)
+            return
         bitrate = mbit
     }
 
