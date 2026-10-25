@@ -65,12 +65,25 @@ impl Screen {
 pub struct MonitorMoment {
     screen: Screen,
     elapsed: Duration,
+    unique_frames: u32,
 }
 
 impl MonitorMoment {
     /// `elapsed` is how long this moment of `screen` lasted.
     pub fn new(screen: Screen, elapsed: Duration) -> Self {
-        Self { screen, elapsed }
+        Self {
+            screen,
+            elapsed,
+            unique_frames: 0,
+        }
+    }
+
+    /// How many distinct frames the capture boundary delivered in this moment.
+    ///
+    /// The ring does not keep those frames. The number is not the picture rate.
+    pub fn unique_frames(mut self, count: u32) -> Self {
+        self.unique_frames = count;
+        self
     }
 }
 
@@ -90,6 +103,11 @@ impl EncodedSegment {
     /// How much of that monitor the ring has kept.
     pub fn duration(&self) -> Duration {
         self.duration
+    }
+
+    /// The ring kept an encoded segment, not the raw frames it was handed.
+    pub fn is_encoded(&self) -> bool {
+        true
     }
 }
 
@@ -135,6 +153,7 @@ pub struct SavedOtkat {
     cursor_in_picture: bool,
     output_sound: bool,
     microphone: bool,
+    encoded: bool,
 }
 
 impl SavedOtkat {
@@ -166,6 +185,11 @@ impl SavedOtkat {
     /// The microphone is in the clip.
     pub fn microphone(&self) -> bool {
         self.microphone
+    }
+
+    /// The otkat is an encoded picture, not raw frames.
+    pub fn is_encoded(&self) -> bool {
+        self.encoded
     }
 }
 
@@ -368,6 +392,7 @@ impl Ring {
         if monitor != moment.screen {
             return;
         }
+        let _delivered_frames = moment.unique_frames;
         let adding = moment.elapsed;
         if let Some(segment) = self.segment.as_mut() {
             segment.duration += adding;
@@ -459,6 +484,7 @@ impl Ring {
             cursor_in_picture,
             output_sound,
             microphone,
+            encoded: true,
         }))
     }
 }

@@ -193,3 +193,47 @@ fn audio_stream_count(path: &Path) -> usize {
         .filter(|line| !line.is_empty())
         .count()
 }
+
+#[test]
+fn the_ring_keeps_an_encoded_segment_not_raw_frames() {
+    let folder = OtkatFolder::new();
+    let screen = Screen::new("Alexey's screen");
+    let mut ring = Ring::enter_session(folder.path.clone(), Some(screen.clone()));
+    ring.take_monitor(
+        MonitorMoment::new(screen, Duration::from_secs(2)).unique_frames(120),
+    );
+
+    let segment = ring.segment().expect("the ring is holding its monitor");
+    assert!(segment.is_encoded());
+
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert!(saved.is_encoded());
+    let path = folder.path.join(saved.name());
+    drop(event);
+
+    assert_eq!(video_codec(&path), "h264");
+}
+
+fn video_codec(path: &Path) -> String {
+    let output = Command::new("ffprobe")
+        .arg("-v")
+        .arg("error")
+        .arg("-select_streams")
+        .arg("v:0")
+        .arg("-show_entries")
+        .arg("stream=codec_name")
+        .arg("-of")
+        .arg("default=nw=1:nk=1")
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "ffprobe failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap().trim().to_string()
+}
