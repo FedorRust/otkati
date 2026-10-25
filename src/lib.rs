@@ -80,9 +80,15 @@ pub struct Bitrate {
 }
 
 impl Bitrate {
-    /// `mbit_per_sec` is the picture bitrate. The ring starts at 25.
-    pub fn new(mbit_per_sec: u8) -> Self {
-        Self { mbit_per_sec }
+    /// `mbit_per_sec` is the picture bitrate, from 8 to 80.
+    ///
+    /// Any other number is not a picture bitrate.
+    pub fn new(mbit_per_sec: u8) -> Option<Self> {
+        if (8..=80).contains(&mbit_per_sec) {
+            Some(Self { mbit_per_sec })
+        } else {
+            None
+        }
     }
 
     /// The picture bitrate in Mbit/s.
@@ -93,7 +99,7 @@ impl Bitrate {
 
 impl Default for Bitrate {
     fn default() -> Self {
-        Self { mbit_per_sec: 25 }
+        Self::new(25).expect("25 is a picture bitrate")
     }
 }
 

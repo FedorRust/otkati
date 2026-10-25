@@ -133,7 +133,7 @@ fn changing_the_share_leaves_the_bitrate() {
     let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
     ring.remember_screen(Screen::with_frame("desk", 1920, 1080));
     ring.hold(Duration::from_secs(1));
-    ring.take_bitrate(Bitrate::new(40));
+    ring.take_bitrate(Bitrate::new(40).expect("40 is a picture bitrate"));
 
     ring.take_resolution_share(ResolutionShare::new(50).expect("50 is a resolution share"));
     let half = saved_otkat(&mut ring);
@@ -175,4 +175,25 @@ fn the_share_runs_from_50_to_100_in_steps_of_10() {
     assert!(ResolutionShare::new(40).is_none());
     assert!(ResolutionShare::new(55).is_none());
     assert!(ResolutionShare::new(110).is_none());
+}
+
+#[test]
+fn the_bitrate_runs_from_8_to_80_mbit() {
+    assert!(Bitrate::new(7).is_none());
+    assert!(Bitrate::new(81).is_none());
+
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.remember_screen(Screen::with_frame("desk", 1920, 1080));
+    ring.hold(Duration::from_secs(1));
+    ring.take_resolution_share(ResolutionShare::new(50).expect("50 is a resolution share"));
+
+    for mbit in [8, 9, 25, 80] {
+        ring.take_bitrate(Bitrate::new(mbit).expect("a bitrate from 8 to 80"));
+        let saved = saved_otkat(&mut ring);
+        assert_eq!(saved.bitrate_mbit(), mbit);
+        assert_eq!(saved.width(), 960, "bitrate does not rescale the frame");
+        assert_eq!(saved.height(), 540, "bitrate does not rescale the frame");
+        drop(saved);
+    }
 }
