@@ -279,6 +279,14 @@ impl Ring {
         self.bind = bind;
     }
 
+    /// The face hands the ring a new otkat folder.
+    ///
+    /// The next otkat is written there. Files already in the previous folder
+    /// stay where they are.
+    pub fn take_otkat_folder(&mut self, folder: impl Into<PathBuf>) {
+        self.otkat_folder = folder.into();
+    }
+
     /// `chord` reached the ring.
     ///
     /// When it is not the ring's bind, nothing is saved. When the session is
