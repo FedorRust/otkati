@@ -59,21 +59,50 @@ Window {
         return ""
     }
 
+    function languageChoice(choice) {
+        if (choice === "en")
+            return englishChoice.text
+        if (choice === "ru")
+            return russianChoice.text
+        return ""
+    }
+
+    function chooseLanguage(choice) {
+        if (choice === "en" || choice === "ru")
+            setLanguage(choice)
+    }
+
     Item {
         id: settings
         visible: false
 
-        Text { id: lengthLabel; text: "Length" }
-        Text { id: resolutionShareLabel; text: "Resolution share" }
-        Text { id: bitrateLabel; text: "Bitrate" }
-        Text { id: encoderLabel; text: "Encoder" }
-        Text { id: ringPlaceLabel; text: "Ring place" }
-        Text { id: ringMonitorLabel; text: "Ring monitor" }
-        Text { id: bindLabel; text: "Bind" }
-        Text { id: languageLabel; text: "Language" }
-        Text { id: themeLabel; text: "Theme" }
-        Text { id: otkatFolderLabel; text: "Otkat folder" }
-        Text { id: switchLabel; text: "Switch" }
+        Text { id: lengthLabel; text: root.language === "ru" ? "Длина" : "Length" }
+        Text { id: resolutionShareLabel; text: root.language === "ru" ? "Доля разрешения" : "Resolution share" }
+        Text { id: bitrateLabel; text: root.language === "ru" ? "Битрейт" : "Bitrate" }
+        Text { id: encoderLabel; text: root.language === "ru" ? "Кодировщик" : "Encoder" }
+        Text { id: ringPlaceLabel; text: root.language === "ru" ? "Место кольца" : "Ring place" }
+        Text { id: ringMonitorLabel; text: root.language === "ru" ? "Монитор кольца" : "Ring monitor" }
+        Text { id: bindLabel; text: root.language === "ru" ? "Бинд" : "Bind" }
+        Text { id: languageLabel; text: root.language === "ru" ? "Язык" : "Language" }
+        Text { id: themeLabel; text: root.language === "ru" ? "Тема" : "Theme" }
+        Text { id: otkatFolderLabel; text: root.language === "ru" ? "Папка откатов" : "Otkat folder" }
+        Text { id: switchLabel; text: root.language === "ru" ? "Выключатель" : "Switch" }
+        Text {
+            id: englishChoice
+            text: root.language === "ru" ? "Английский" : "English"
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.chooseLanguage("en")
+            }
+        }
+        Text {
+            id: russianChoice
+            text: root.language === "ru" ? "Русский" : "Russian"
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.chooseLanguage("ru")
+            }
+        }
     }
 
     function showPlashka(event) {
