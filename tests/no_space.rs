@@ -33,12 +33,12 @@ fn enter_full_disk(test_name: &str) -> bool {
     false
 }
 
-struct FullDisk {
+struct Tmpfs {
     path: PathBuf,
 }
 
-impl FullDisk {
-    fn new() -> Self {
+impl Tmpfs {
+    fn mounted() -> Self {
         let tick = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -51,10 +51,20 @@ impl FullDisk {
             .status()
             .expect("mount");
         assert!(status.success(), "tmpfs did not mount");
+        Self { path }
+    }
+
+    fn full() -> Self {
+        let disk = Self::mounted();
+        disk.fill();
+        disk
+    }
+
+    fn fill(&self) {
         let mut filler = OpenOptions::new()
             .create(true)
             .write(true)
-            .open(path.join("filler"))
+            .open(self.path.join("filler"))
             .unwrap();
         let block = vec![0_u8; 4096];
         loop {
@@ -66,12 +76,10 @@ impl FullDisk {
                 Err(err) => panic!("filling the disk failed: {err}"),
             }
         }
-        drop(filler);
-        Self { path }
     }
 }
 
-impl Drop for FullDisk {
+impl Drop for Tmpfs {
     fn drop(&mut self) {
         let _ = Command::new("umount").arg(&self.path).status();
         let _ = fs::remove_dir_all(&self.path);
@@ -115,7 +123,7 @@ fn bind_when_the_disk_has_no_space_leaves_no_finished_otkat() {
     if !enter_full_disk("bind_when_the_disk_has_no_space_leaves_no_finished_otkat") {
         return;
     }
-    let disk = FullDisk::new();
+    let disk = Tmpfs::full();
     let mut ring = Ring::with_clock(&disk.path, || BindDay::new(2026, 10, 25));
     ring.hold(Duration::from_secs(120));
 
@@ -142,4 +150,44 @@ fn bind_when_the_disk_has_no_space_leaves_no_finished_otkat() {
         120
     );
     assert!(!disk.path.join("otkat2-2026-10-25.mp4").exists());
+}
+
+#[test]
+fn a_partial_file_does_not_remain_as_a_finished_otkat() {
+    if !enter_full_disk("a_partial_file_does_not_remain_as_a_finished_otkat") {
+        return;
+    }
+    let disk = Tmpfs::mounted();
+    let mut ring = Ring::with_clock(&disk.path, || BindDay::new(2026, 10, 25));
+    ring.hold(Duration::from_secs(120));
+
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected the success plashka before the write, got {event:?}");
+    };
+    assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
+    assert!(
+        !disk.path.join("otkat1-2026-10-25.mp4").exists(),
+        "the success plashka comes out before the file is in the folder"
+    );
+
+    disk.fill();
+    drop(event);
+    assert_eq!(
+        mp4_names(&disk.path),
+        Vec::<String>::new(),
+        "a partial file must not remain as a finished otkat"
+    );
+
+    fs::remove_file(disk.path.join("filler")).unwrap();
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected the first finished otkat once space returned, got {event:?}");
+    };
+    assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
+    drop(event);
+    assert_eq!(
+        mp4_duration_secs(&disk.path.join("otkat1-2026-10-25.mp4")),
+        120
+    );
 }

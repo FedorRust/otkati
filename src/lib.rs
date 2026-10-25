@@ -160,6 +160,9 @@ impl PendingOtkat {
             Ok(())
         } else {
             let detail = String::from_utf8_lossy(&output.stderr);
+            if detail.contains("No space left on device") {
+                let _ = fs::remove_file(&self.path);
+            }
             Err(std::io::Error::other(format!(
                 "ffmpeg exited with {}: {detail}",
                 output.status
