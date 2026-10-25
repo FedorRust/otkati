@@ -68,6 +68,16 @@ Window {
         return ""
     }
 
+    function encoderMark(item) {
+        if (item === "H.264")
+            return h264Mark.text
+        if (item === "HEVC")
+            return hevcMark.text
+        if (item === "AV1")
+            return av1Mark.text
+        return ""
+    }
+
     function settingLabel(key) {
         if (key === "length")
             return lengthLabel.text
@@ -115,6 +125,9 @@ Window {
         Text { id: resolutionShareLabel; text: root.language === "ru" ? "Доля разрешения" : "Resolution share" }
         Text { id: bitrateLabel; text: root.language === "ru" ? "Битрейт" : "Bitrate" }
         Text { id: encoderLabel; text: root.language === "ru" ? "Кодировщик" : "Encoder" }
+        Text { id: h264Mark; text: "NVIDIA, AMD, Intel, and machines with no hardware encoder" }
+        Text { id: hevcMark; text: "NVIDIA, including the 3060 Ti and 3070 Ti, and AMD or Intel when the card can do HEVC" }
+        Text { id: av1Mark; text: "NVIDIA from the 40 series and AMD from the RX 7000" }
         Text { id: ringPlaceLabel; text: root.language === "ru" ? "Место кольца" : "Ring place" }
         Text { id: ringMonitorLabel; text: root.language === "ru" ? "Монитор кольца" : "Ring monitor" }
         Text { id: bindLabel; text: root.language === "ru" ? "Бинд" : "Bind" }

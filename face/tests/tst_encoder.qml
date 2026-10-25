@@ -20,4 +20,12 @@ TestCase {
         compare(face.encoderItems[2], "AV1")
         compare(face.encoder, "H.264")
     }
+
+    function test_each_item_is_marked_for_the_cards_it_suits() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        compare(face.encoderMark("H.264"), "NVIDIA, AMD, Intel, and machines with no hardware encoder")
+        compare(face.encoderMark("HEVC"), "NVIDIA, including the 3060 Ti and 3070 Ti, and AMD or Intel when the card can do HEVC")
+        compare(face.encoderMark("AV1"), "NVIDIA from the 40 series and AMD from the RX 7000")
+    }
 }
