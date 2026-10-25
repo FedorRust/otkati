@@ -11,20 +11,26 @@ Window {
     enum PlashkaEvent {
         NothingToSave,
         Saved,
-        ClipNotSaved
+        ClipNotSaved,
+        NoAccess
     }
 
     property color themeColor: "#000000"
     property string language: "en"
-    property bool redAlarm: false
     // The bind the face hands to the ring. Alt+Z until the person changes it.
     property string bind: "Alt+Z"
     // Reported by the shell. The program language does not follow either value.
     property string shellLanguage: ""
     property string serpantinumLanguage: ""
-    property int plashkaEvent: -1
     readonly property alias plashkaText: label.text
     readonly property alias plashkaColor: background.color
+    readonly property int plashkaEvent: plashka.event
+
+    QtObject {
+        id: plashka
+        property int event: -1
+        property bool alarm: false
+    }
 
     function setTheme(color) {
         themeColor = color
@@ -34,7 +40,7 @@ Window {
         language = next
         if (!visible)
             return
-        const text = plashkaPhrase(plashkaEvent)
+        const text = plashkaPhrase(plashka.event)
         if (text !== "")
             label.text = text
     }
@@ -132,18 +138,20 @@ Window {
     }
 
     function showPlashka(event) {
-        if (event === Face.PlashkaEvent.Saved) {
-            plashkaEvent = event
-            redAlarm = false
+        if (event === Face.PlashkaEvent.Saved || event === Face.PlashkaEvent.NoAccess) {
+            plashka.event = event
+            plashka.alarm = false
             label.text = ""
-        } else {
-            const text = plashkaPhrase(event)
-            if (text === "")
-                return
-            plashkaEvent = event
-            redAlarm = true
-            label.text = text
+            visible = true
+            hideTimer.restart()
+            return
         }
+        const text = plashkaPhrase(event)
+        if (text === "")
+            return
+        plashka.event = event
+        plashka.alarm = true
+        label.text = text
         visible = true
         hideTimer.restart()
     }
@@ -157,7 +165,7 @@ Window {
     Rectangle {
         id: background
         anchors.fill: parent
-        color: root.redAlarm ? "#ff0000" : root.themeColor
+        color: plashka.alarm ? "#ff0000" : root.themeColor
     }
 
     Text {
