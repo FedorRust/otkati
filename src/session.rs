@@ -2,6 +2,9 @@ use std::fs;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::time::Duration;
+
+use crate::{BindDay, Ring};
 
 /// How the ring enters a Hyprland session.
 ///
@@ -28,8 +31,25 @@ impl SessionAutostart {
     /// The ring is already running. The person does not open it.
     /// `program_dir` is where the session finds the program the autostart names.
     pub fn log_in(&self, program_dir: impl AsRef<Path>) -> HyprlandSession {
+        self.open(program_dir, Ring::new(Ring::default_otkat_folder()))
+    }
+
+    /// Log in, with `clock` answering the bind day.
+    ///
+    /// `otkat_folder` is where a bind writes. Minutes the ring already holds
+    /// are still there after Serpantinum restarts.
+    pub fn log_in_with_clock(
+        &self,
+        otkat_folder: impl Into<PathBuf>,
+        program_dir: impl AsRef<Path>,
+        clock: impl Fn() -> BindDay + Send + 'static,
+    ) -> HyprlandSession {
+        self.open(program_dir, Ring::with_clock(otkat_folder, clock))
+    }
+
+    fn open(&self, program_dir: impl AsRef<Path>, ring: Ring) -> HyprlandSession {
         let shell = spawn_shell();
-        let ring = if self.starts_with_graphical_session {
+        let ring_process = if self.starts_with_graphical_session {
             let program = resolve_program(&self.exec_start, program_dir.as_ref());
             let group = if self.tied_to_shell {
                 Some(shell.id())
@@ -40,7 +60,11 @@ impl SessionAutostart {
         } else {
             None
         };
-        HyprlandSession { ring, shell }
+        HyprlandSession {
+            ring_process,
+            shell,
+            ring,
+        }
     }
 }
 
@@ -48,14 +72,15 @@ impl SessionAutostart {
 ///
 /// Serpantinum is running too. The ring is not its child.
 pub struct HyprlandSession {
-    ring: Option<Child>,
+    ring_process: Option<Child>,
     shell: Child,
+    ring: Ring,
 }
 
 impl HyprlandSession {
     /// Whether the ring process the session started is still running.
     pub fn ring_is_running(&mut self) -> bool {
-        let Some(child) = self.ring.as_mut() else {
+        let Some(child) = self.ring_process.as_mut() else {
             return false;
         };
         matches!(child.try_wait(), Ok(None))
@@ -63,21 +88,30 @@ impl HyprlandSession {
 
     /// The ring process login started.
     pub fn ring_pid(&self) -> u32 {
-        self.ring.as_ref().expect("the ring is running").id()
+        self.ring_process
+            .as_ref()
+            .expect("the ring is running")
+            .id()
     }
 
     /// Whether that ring process was started by Serpantinum.
     pub fn ring_is_child_of_shell(&self) -> bool {
-        let Some(ring) = self.ring.as_ref() else {
+        let Some(ring) = self.ring_process.as_ref() else {
             return false;
         };
         parent_pid(ring.id()) == self.shell.id()
+    }
+
+    /// The ring this session is holding. A bind saves from it.
+    pub fn ring(&mut self) -> &mut Ring {
+        &mut self.ring
     }
 
     /// Restart Serpantinum.
     ///
     /// The shell process and anything it started go away. The ring stays
     /// the process login started, unless the autostart tied it to the shell.
+    /// Minutes already held stay with that process, so a later bind can save them.
     pub fn restart_shell(&mut self) {
         let shell_pid = self.shell.id();
         let children = child_pids(shell_pid);
@@ -86,8 +120,12 @@ impl HyprlandSession {
             kill_pid(pid);
         }
         let _ = self.shell.wait();
-        if let Some(ring) = self.ring.as_mut() {
-            let _ = ring.try_wait();
+        let alive = self
+            .ring_process
+            .as_mut()
+            .is_some_and(|ring| matches!(ring.try_wait(), Ok(None)));
+        if !alive {
+            self.ring.hold(Duration::ZERO);
         }
         self.shell = spawn_shell();
     }
@@ -95,7 +133,7 @@ impl HyprlandSession {
 
 impl Drop for HyprlandSession {
     fn drop(&mut self) {
-        if let Some(mut ring) = self.ring.take() {
+        if let Some(mut ring) = self.ring_process.take() {
             let _ = ring.kill();
             let _ = ring.wait();
         }
