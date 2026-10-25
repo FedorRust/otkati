@@ -26,6 +26,8 @@ pub enum Encoder {
 pub enum Card {
     /// NVIDIA GeForce RTX 3060 Ti.
     Nvidia3060Ti,
+    /// NVIDIA GeForce RTX 3070 Ti.
+    Nvidia3070Ti,
 }
 
 /// The key combination that asks the ring to save an otkat.
@@ -313,7 +315,10 @@ impl Ring {
     /// Until the ring has seen a card, the only item is H.264.
     pub fn offered_encoders(&self) -> Vec<Encoder> {
         let mut offered = vec![Encoder::H264];
-        if matches!(self.card, Some(Card::Nvidia3060Ti)) {
+        if matches!(
+            self.card,
+            Some(Card::Nvidia3060Ti | Card::Nvidia3070Ti)
+        ) {
             offered.push(Encoder::Hevc);
         }
         offered

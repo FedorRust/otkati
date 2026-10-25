@@ -92,3 +92,20 @@ fn choosing_av1_on_a_3060_ti_leaves_the_current_encoder() {
     };
     assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
 }
+
+#[test]
+fn a_3070_ti_offers_h264_and_hevc_and_refuses_av1() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::new(folder.path.clone());
+    ring.see_card(Card::Nvidia3070Ti);
+
+    assert_eq!(ring.encoder(), Encoder::H264);
+    assert_eq!(
+        ring.offered_encoders(),
+        vec![Encoder::H264, Encoder::Hevc]
+    );
+
+    ring.take_encoder(Encoder::Av1);
+
+    assert_eq!(ring.encoder(), Encoder::H264);
+}
