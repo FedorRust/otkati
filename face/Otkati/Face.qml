@@ -17,7 +17,8 @@ Window {
         Ordinary,
         Saved,
         ClipNotSaved,
-        NoAccess
+        NoAccess,
+        RingOff
     }
 
     readonly property var colorKeys: [
@@ -70,6 +71,10 @@ Window {
     property string encoder: "H.264"
     property int sideShare: 100
     property int bitrate: 25
+    // The length, in seconds, the face hands to the ring. Ten minutes until the person changes it.
+    property int length: 600
+    // The switch the face hands to the ring. On until the person turns the ring off.
+    property bool ringOn: true
 
     function knob(key) {
         if (key === "ringPlace")
@@ -257,6 +262,16 @@ Window {
         bind = chord
     }
 
+    function setLength(seconds) {
+        if (!Number.isInteger(seconds) || seconds < 15 || seconds > 1200)
+            return
+        length = seconds
+    }
+
+    function setSwitch(gathering) {
+        ringOn = gathering
+    }
+
     function setShellLanguage(next) {
         shellLanguage = next
     }
@@ -356,6 +371,7 @@ Window {
         return event === Face.PlashkaEvent.Ordinary
                 || event === Face.PlashkaEvent.Saved
                 || event === Face.PlashkaEvent.NoAccess
+                || event === Face.PlashkaEvent.RingOff
     }
 
     function showPlashka(event) {
