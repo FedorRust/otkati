@@ -92,6 +92,7 @@ impl MonitorMoment {
 pub struct EncodedSegment {
     monitor: Screen,
     duration: Duration,
+    frames_per_second: u32,
 }
 
 impl EncodedSegment {
@@ -108,6 +109,11 @@ impl EncodedSegment {
     /// The ring kept an encoded segment, not the raw frames it was handed.
     pub fn is_encoded(&self) -> bool {
         true
+    }
+
+    /// The picture rate the ring aims for. Not the count of unique frames delivered.
+    pub fn frames_per_second(&self) -> u32 {
+        self.frames_per_second
     }
 }
 
@@ -154,6 +160,7 @@ pub struct SavedOtkat {
     output_sound: bool,
     microphone: bool,
     encoded: bool,
+    frames_per_second: u32,
 }
 
 impl SavedOtkat {
@@ -191,6 +198,11 @@ impl SavedOtkat {
     pub fn is_encoded(&self) -> bool {
         self.encoded
     }
+
+    /// The picture rate of this otkat. Not a count of unique frames.
+    pub fn frames_per_second(&self) -> u32 {
+        self.frames_per_second
+    }
 }
 
 impl Drop for SavedOtkat {
@@ -210,6 +222,7 @@ struct PendingOtkat {
     cursor: bool,
     output_sound: bool,
     microphone: bool,
+    frames_per_second: u32,
 }
 
 impl PendingOtkat {
@@ -218,7 +231,12 @@ impl PendingOtkat {
             fs::create_dir_all(parent)?;
         }
         let seconds = self.duration.as_secs();
-        let mut source = format!("color=c=black:s=16x16:r=1:d={seconds}");
+        let rate = if self.frames_per_second == 0 {
+            1
+        } else {
+            self.frames_per_second
+        };
+        let mut source = format!("color=c=black:s=16x16:r={rate}:d={seconds}");
         if self.cursor {
             source.push_str(",drawbox=x=12:y=12:w=4:h=4:color=white:t=fill");
         }
@@ -281,6 +299,9 @@ impl PendingOtkat {
 
 /// The length the ring aims to hold until the length knob exists: 10 minutes.
 const CHOSEN_LENGTH: Duration = Duration::from_secs(10 * 60);
+
+/// The picture rate the ring aims for. Capture may deliver fewer unique frames.
+const PICTURE_RATE: u32 = 60;
 
 /// Encoded seconds the ring holds, and the bind that asks to save an otkat.
 ///
@@ -402,6 +423,7 @@ impl Ring {
         self.segment = Some(EncodedSegment {
             monitor,
             duration: adding,
+            frames_per_second: PICTURE_RATE,
         });
         self.held = adding;
     }
@@ -409,6 +431,13 @@ impl Ring {
     /// The encoded segment the ring is holding, once its monitor has entered.
     pub fn segment(&self) -> Option<&EncodedSegment> {
         self.segment.as_ref()
+    }
+
+    /// The picture rate the ring aims for, in frames each second.
+    ///
+    /// A capture boundary that delivers fewer distinct frames does not change it.
+    pub fn picture_rate(&self) -> u32 {
+        PICTURE_RATE
     }
 
     /// Output sound arrived. It does not ask which screen to give.
@@ -470,6 +499,7 @@ impl Ring {
         let cursor_in_picture = live;
         let output_sound = live;
         let microphone = live;
+        let frames_per_second = if live { PICTURE_RATE } else { 0 };
         Some(PlashkaEvent::Saved(SavedOtkat {
             name,
             duration,
@@ -479,12 +509,14 @@ impl Ring {
                 cursor: cursor_in_picture,
                 output_sound,
                 microphone,
+                frames_per_second,
             }),
             monitor,
             cursor_in_picture,
             output_sound,
             microphone,
             encoded: true,
+            frames_per_second,
         }))
     }
 }

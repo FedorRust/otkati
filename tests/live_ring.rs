@@ -237,3 +237,51 @@ fn video_codec(path: &Path) -> String {
     );
     String::from_utf8(output.stdout).unwrap().trim().to_string()
 }
+
+#[test]
+fn the_ring_aims_for_sixty_frames_a_second_without_sixty_unique_frames() {
+    let folder = OtkatFolder::new();
+    let screen = Screen::new("Alexey's screen");
+    let mut ring = Ring::enter_session(folder.path.clone(), Some(screen.clone()));
+    ring.take_monitor(MonitorMoment::new(screen, Duration::from_secs(1)).unique_frames(7));
+
+    assert_eq!(ring.picture_rate(), 60);
+    let segment = ring.segment().expect("the monitor entered the ring");
+    assert_eq!(segment.frames_per_second(), 60);
+
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.frames_per_second(), 60);
+    let path = folder.path.join(saved.name());
+    drop(event);
+
+    assert_eq!(video_frame_rate(&path), 60);
+}
+
+fn video_frame_rate(path: &Path) -> u32 {
+    let output = Command::new("ffprobe")
+        .arg("-v")
+        .arg("error")
+        .arg("-select_streams")
+        .arg("v:0")
+        .arg("-show_entries")
+        .arg("stream=r_frame_rate")
+        .arg("-of")
+        .arg("default=nw=1:nk=1")
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "ffprobe failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8(output.stdout).unwrap();
+    let (num, den) = text.trim().split_once('/').unwrap();
+    let num: u32 = num.parse().unwrap();
+    let den: u32 = den.parse().unwrap();
+    assert_eq!(den, 1, "frame rate {text}");
+    num
+}
