@@ -19,6 +19,9 @@ Window {
     property string language: "en"
     // The bind the face hands to the ring. Alt+Z until the person changes it.
     property string bind: "Alt+Z"
+    // The encoder the face hands to the ring. H.264 until the person switches.
+    property string encoder: "H.264"
+    readonly property var encoderItems: ["H.264", "HEVC", "AV1"]
     // Reported by the shell. The program language does not follow either value.
     property string shellLanguage: ""
     property string serpantinumLanguage: ""
