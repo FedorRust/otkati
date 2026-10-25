@@ -39,4 +39,27 @@ TestCase {
         face.chooseLanguage("en")
         compare(face.encoderMark("H.264"), "NVIDIA, AMD, Intel, and machines with no hardware encoder")
     }
+
+    function test_an_item_the_card_cannot_do_stays_visible_and_is_not_chosen() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.setTheme("#336699")
+        face.setOfferedEncoders(["H.264", "HEVC"])
+
+        compare(face.encoderItems[2], "AV1")
+        compare(face.encoderSelectable("AV1"), false)
+        compare(face.encoderSelectable("H.264"), true)
+        compare(face.encoderSelectable("HEVC"), true)
+
+        face.chooseEncoder("HEVC")
+        compare(face.encoder, "HEVC")
+
+        face.showPlashka(Face.PlashkaEvent.Saved)
+        compare(face.plashkaColor, "#336699")
+        face.chooseEncoder("AV1")
+        compare(face.encoder, "HEVC")
+        compare(face.plashkaEvent, Face.PlashkaEvent.Saved)
+        compare(face.plashkaColor, "#336699")
+        compare(face.visible, true)
+    }
 }

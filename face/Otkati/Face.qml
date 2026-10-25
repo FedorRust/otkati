@@ -22,6 +22,8 @@ Window {
     // The encoder the face hands to the ring. H.264 until the person switches.
     property string encoder: "H.264"
     readonly property var encoderItems: ["H.264", "HEVC", "AV1"]
+    // Items the ring says this card can do. H.264 until the ring says otherwise.
+    property var offeredEncoders: ["H.264"]
     // Reported by the shell. The program language does not follow either value.
     property string shellLanguage: ""
     property string serpantinumLanguage: ""
@@ -66,6 +68,24 @@ Window {
         if (event === Face.PlashkaEvent.ClipNotSaved)
             return language === "ru" ? "Откат не сохранился" : "Couldn't save the clip"
         return ""
+    }
+
+    function setOfferedEncoders(items) {
+        offeredEncoders = items
+    }
+
+    function encoderSelectable(item) {
+        for (let i = 0; i < offeredEncoders.length; ++i) {
+            if (offeredEncoders[i] === item)
+                return true
+        }
+        return false
+    }
+
+    function chooseEncoder(item) {
+        if (!encoderSelectable(item))
+            return
+        encoder = item
     }
 
     function encoderMark(item) {
