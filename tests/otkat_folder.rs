@@ -77,3 +77,21 @@ fn the_next_otkat_is_written_in_the_folder_the_face_handed() {
     assert!(!old.path.join("otkat1-2026-10-25.mp4").exists());
     assert!(!old.path.join("otkat6-2026-10-25.mp4").exists());
 }
+
+#[test]
+fn files_already_in_the_old_folder_stay_there() {
+    let old = OtkatFolder::new();
+    let kept = old.path.join("otkat5-2026-10-24.mp4");
+    fs::write(&kept, b"kept").unwrap();
+    let scratch = OtkatFolder::new();
+    let handed = scratch.path.join("next");
+    let mut ring = Ring::with_clock(old.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.hold(Duration::from_secs(120));
+
+    ring.take_otkat_folder(&handed);
+    let event = ring.bind(Ring::default_bind());
+    drop(event);
+
+    assert_eq!(fs::read(&kept).unwrap(), b"kept");
+    assert!(!handed.join("otkat5-2026-10-24.mp4").exists());
+}
