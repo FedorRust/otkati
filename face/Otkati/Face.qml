@@ -55,6 +55,8 @@ Window {
     }
 
     function setResolutionShare(percent) {
+        if (percent < 50 || percent > 100 || percent % 10 !== 0)
+            return
         resolutionShare = percent
     }
 

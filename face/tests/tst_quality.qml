@@ -29,4 +29,20 @@ TestCase {
         compare(face.resolutionShare, 70)
         compare(face.bitrate, 40)
     }
+
+    function test_the_share_moves_from_50_to_100_in_steps_of_10() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        const steps = [50, 60, 70, 80, 90, 100]
+        for (let i = 0; i < steps.length; i++) {
+            face.setResolutionShare(steps[i])
+            compare(face.resolutionShare, steps[i])
+        }
+        face.setResolutionShare(55)
+        compare(face.resolutionShare, 100)
+        face.setResolutionShare(40)
+        compare(face.resolutionShare, 100)
+        face.setResolutionShare(110)
+        compare(face.resolutionShare, 100)
+    }
 }
