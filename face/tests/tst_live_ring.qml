@@ -21,4 +21,13 @@ TestCase {
         verify(face.knobNames.indexOf("microphoneOnly") === -1)
         verify(face.knobNames.indexOf("microphone") === -1)
     }
+
+    function test_until_the_knobs_change_the_face_hands_memory_h264_full_sides_and_25_mbit() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        compare(face.knob("ringPlace"), "memory")
+        compare(face.knob("encoder"), "H.264")
+        compare(face.knob("sideShare"), 100)
+        compare(face.knob("bitrate"), 25)
+    }
 }

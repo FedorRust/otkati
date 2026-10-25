@@ -87,6 +87,20 @@ impl MonitorMoment {
     }
 }
 
+/// Where the encoded ring lies until an otkat is saved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RingPlace {
+    /// The default, until the ring-place knob changes.
+    Memory,
+}
+
+/// What compresses the ring's picture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Encoder {
+    /// The default, until the encoder knob changes.
+    H264,
+}
+
 /// The encoded segment the ring is holding for its monitor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EncodedSegment {
@@ -223,6 +237,7 @@ struct PendingOtkat {
     output_sound: bool,
     microphone: bool,
     frames_per_second: u32,
+    bitrate_mbps: u32,
 }
 
 impl PendingOtkat {
@@ -274,6 +289,11 @@ impl PendingOtkat {
             .arg("ultrafast")
             .arg("-pix_fmt")
             .arg("yuv420p");
+        if self.bitrate_mbps > 0 {
+            command
+                .arg("-b:v")
+                .arg(format!("{}M", self.bitrate_mbps));
+        }
         if with_sound {
             command.arg("-c:a").arg("aac");
         } else {
@@ -302,6 +322,12 @@ const CHOSEN_LENGTH: Duration = Duration::from_secs(10 * 60);
 
 /// The picture rate the ring aims for. Capture may deliver fewer unique frames.
 const PICTURE_RATE: u32 = 60;
+
+/// Each side of the ring monitor, until the share knob changes.
+const DEFAULT_SIDE_SHARE: u32 = 100;
+
+/// Picture bitrate in Mbit/s, until the bitrate knob changes.
+const DEFAULT_BITRATE_MBPS: u32 = 25;
 
 /// Encoded seconds the ring holds, and the bind that asks to save an otkat.
 ///
@@ -440,6 +466,26 @@ impl Ring {
         PICTURE_RATE
     }
 
+    /// Where the encoded ring lies until the ring-place knob changes.
+    pub fn place(&self) -> RingPlace {
+        RingPlace::Memory
+    }
+
+    /// What compresses the picture until the encoder knob changes.
+    pub fn encoder(&self) -> Encoder {
+        Encoder::H264
+    }
+
+    /// The share of each side of the ring monitor, until that knob changes.
+    pub fn side_share(&self) -> u32 {
+        DEFAULT_SIDE_SHARE
+    }
+
+    /// Picture bitrate in Mbit/s, until the bitrate knob changes.
+    pub fn bitrate_mbps(&self) -> u32 {
+        DEFAULT_BITRATE_MBPS
+    }
+
     /// Output sound arrived. It does not ask which screen to give.
     ///
     /// A live ring already keeps output sound with the microphone. This does
@@ -500,6 +546,7 @@ impl Ring {
         let output_sound = live;
         let microphone = live;
         let frames_per_second = if live { PICTURE_RATE } else { 0 };
+        let bitrate_mbps = if live { self.bitrate_mbps() } else { 0 };
         Some(PlashkaEvent::Saved(SavedOtkat {
             name,
             duration,
@@ -510,6 +557,7 @@ impl Ring {
                 output_sound,
                 microphone,
                 frames_per_second,
+                bitrate_mbps,
             }),
             monitor,
             cursor_in_picture,

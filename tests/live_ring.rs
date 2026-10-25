@@ -4,7 +4,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use otkati::{MonitorMoment, PlashkaEvent, Ring, Screen};
+use otkati::{Encoder, MonitorMoment, PlashkaEvent, Ring, RingPlace, Screen};
 
 struct OtkatFolder {
     path: PathBuf,
@@ -284,4 +284,24 @@ fn video_frame_rate(path: &Path) -> u32 {
     let den: u32 = den.parse().unwrap();
     assert_eq!(den, 1, "frame rate {text}");
     num
+}
+
+#[test]
+fn until_the_knobs_change_the_ring_uses_memory_h264_full_sides_and_25_mbit() {
+    let folder = OtkatFolder::new();
+    let screen = Screen::new("Alexey's screen");
+    let mut ring = Ring::enter_session(folder.path.clone(), Some(screen.clone()));
+
+    assert_eq!(ring.place(), RingPlace::Memory);
+    assert_eq!(ring.encoder(), Encoder::H264);
+    assert_eq!(ring.side_share(), 100);
+    assert_eq!(ring.bitrate_mbps(), 25);
+
+    ring.take_monitor(MonitorMoment::new(screen, Duration::from_secs(2)));
+    assert_eq!(ring.place(), RingPlace::Memory);
+    let written: Vec<_> = fs::read_dir(&folder.path).unwrap().collect();
+    assert!(
+        written.is_empty(),
+        "the encoded ring stays in memory, not in the otkat folder"
+    );
 }

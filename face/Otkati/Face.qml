@@ -65,6 +65,23 @@ Window {
         "otkatFolder",
         "switch"
     ]
+    // Values the face hands the ring until those knobs change.
+    property string ringPlace: "memory"
+    property string encoder: "H.264"
+    property int sideShare: 100
+    property int bitrate: 25
+
+    function knob(key) {
+        if (key === "ringPlace")
+            return ringPlace
+        if (key === "encoder")
+            return encoder
+        if (key === "sideShare")
+            return sideShare
+        if (key === "bitrate")
+            return bitrate
+        return undefined
+    }
     // Reported by the shell. The program language does not follow either value.
     property string shellLanguage: ""
     property string serpantinumLanguage: ""
