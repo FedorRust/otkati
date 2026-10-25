@@ -75,7 +75,6 @@ Window {
         "switch"
     ]
     // Values the face hands the ring until those knobs change.
-    property string ringPlace: "memory"
     property string encoder: "H.264"
     property int sideShare: 100
     property int bitrate: 25

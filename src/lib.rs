@@ -105,13 +105,6 @@ impl MonitorMoment {
     }
 }
 
-/// Where the encoded ring lies until an otkat is saved.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RingPlace {
-    /// The default, until the ring-place knob changes.
-    Memory,
-}
-
 /// What compresses the ring's picture.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Encoder {
@@ -428,6 +421,7 @@ impl Ring {
             return;
         }
         self.held = Duration::ZERO;
+        self.segment = None;
         self.ring_place = place;
         if place == RingPlace::Disk {
             if let Err(err) = fs::create_dir_all(&self.ring_folder) {
@@ -543,11 +537,6 @@ impl Ring {
     /// A capture boundary that delivers fewer distinct frames does not change it.
     pub fn picture_rate(&self) -> u32 {
         PICTURE_RATE
-    }
-
-    /// Where the encoded ring lies until the ring-place knob changes.
-    pub fn place(&self) -> RingPlace {
-        RingPlace::Memory
     }
 
     /// What compresses the picture until the encoder knob changes.
