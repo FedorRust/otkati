@@ -179,3 +179,22 @@ fn the_ring_keeps_turning_and_the_next_bind_writes_another_file() {
         120
     );
 }
+
+#[test]
+fn a_ring_past_the_chosen_length_saves_ten_minutes() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.hold(Duration::from_secs(720));
+
+    let event = ring.bind();
+    let PlashkaEvent::Saved(saved) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.duration(), Duration::from_secs(600));
+    drop(event);
+
+    assert_eq!(
+        mp4_duration_secs(&folder.path.join("otkat1-2026-10-25.mp4")),
+        600
+    );
+}

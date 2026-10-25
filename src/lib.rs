@@ -134,6 +134,9 @@ impl PendingOtkat {
     }
 }
 
+/// The length the ring aims to hold until the length knob exists: 10 minutes.
+const CHOSEN_LENGTH: Duration = Duration::from_secs(10 * 60);
+
 /// Encoded seconds the ring holds, and the bind that asks to save an otkat.
 ///
 /// A newly created ring holds no frame.
@@ -183,7 +186,7 @@ impl Ring {
             return PlashkaEvent::NothingToSave;
         }
         let day = (self.clock)();
-        let duration = self.held;
+        let duration = self.held.min(CHOSEN_LENGTH);
         let number = next_otkat_number(&self.otkat_folder);
         let name = format!("otkat{number}-{}.mp4", day.label());
         let path = self.otkat_folder.join(&name);
