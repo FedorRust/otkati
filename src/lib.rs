@@ -755,9 +755,37 @@ impl Ring {
     /// and does not become the ring's monitor.
     pub fn offer_screen(&mut self, _screen: Screen) {}
 
-    /// The ring's monitor: the screen from the person's answer.
+    /// The ring's monitor: the screen the person chose.
+    ///
+    /// The first choice is the screen answer. A later choice in settings
+    /// replaces it. The program does not fill this from position, focus, or
+    /// a connector name.
     pub fn monitor(&self) -> Option<&Screen> {
         self.screen.as_ref()
+    }
+
+    /// The face hands the ring the monitor the person chose in settings.
+    ///
+    /// The ring moves to that screen. Minutes already held stay with it, and
+    /// a moment of another monitor stays out. Nothing is written to the otkat
+    /// folder.
+    pub fn take_ring_monitor(&mut self, screen: Screen) {
+        self.move_to(screen);
+    }
+
+    fn move_to(&mut self, screen: Screen) {
+        if self
+            .screen
+            .as_ref()
+            .is_some_and(|current| current.name() == screen.name())
+        {
+            return;
+        }
+        self.waiting_for_screen = false;
+        self.screen = Some(screen.clone());
+        if let Some(segment) = self.segment.as_mut() {
+            segment.monitor = screen;
+        }
     }
 
     /// The encoder the ring is using. A new machine uses H.264.
