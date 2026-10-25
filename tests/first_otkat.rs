@@ -107,6 +107,25 @@ fn a_missing_number_in_the_folder_is_not_reused() {
 }
 
 #[test]
+fn the_next_number_follows_the_largest_even_past_nine() {
+    let folder = OtkatFolder::new();
+    fs::write(folder.path.join("otkat2-2026-10-24.mp4"), b"kept").unwrap();
+    fs::write(folder.path.join("otkat10-2026-10-24.mp4"), b"kept").unwrap();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.hold(Duration::from_secs(120));
+
+    let event = ring.bind();
+
+    let PlashkaEvent::Saved(saved) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.name(), "otkat11-2026-10-25.mp4");
+    drop(event);
+    assert!(folder.path.join("otkat10-2026-10-24.mp4").is_file());
+    assert!(folder.path.join("otkat11-2026-10-25.mp4").is_file());
+}
+
+#[test]
 fn the_otkat_number_does_not_restart_on_a_new_day() {
     let folder = OtkatFolder::new();
     fs::write(folder.path.join("otkat5-2026-10-24.mp4"), b"kept").unwrap();
