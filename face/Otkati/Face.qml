@@ -14,6 +14,8 @@ Window {
 
     property color themeColor: "#000000"
     property string language: "en"
+    // The bind the face hands to the ring. Alt+Z until the person changes it.
+    property string bind: "Alt+Z"
     readonly property alias plashkaText: label.text
     readonly property alias plashkaColor: background.color
 
@@ -25,6 +27,10 @@ Window {
         language = next
         if (visible)
             label.text = nothingToSaveText()
+    }
+
+    function setBind(chord) {
+        bind = chord
     }
 
     function nothingToSaveText() {
