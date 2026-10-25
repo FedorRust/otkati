@@ -252,15 +252,30 @@ pub struct MonitorMoment {
     screen: Screen,
     elapsed: Duration,
     unique_frames: u32,
+    picture: [u8; 3],
+    cursor: bool,
+    output_sound: bool,
+    microphone: bool,
+    output_hz: u32,
+    microphone_hz: u32,
 }
 
 impl MonitorMoment {
     /// `elapsed` is how long this moment of `screen` lasted.
+    ///
+    /// The cursor on that monitor is in the moment. Output sound and the
+    /// microphone are not, until the moment says it has them.
     pub fn new(screen: Screen, elapsed: Duration) -> Self {
         Self {
             screen,
             elapsed,
             unique_frames: 0,
+            picture: [0, 0, 0],
+            cursor: true,
+            output_sound: false,
+            microphone: false,
+            output_hz: 440,
+            microphone_hz: 880,
         }
     }
 
@@ -271,6 +286,79 @@ impl MonitorMoment {
         self.unique_frames = count;
         self
     }
+
+    /// The picture this moment actually showed, as red, green, and blue.
+    pub fn picture(mut self, red: u8, green: u8, blue: u8) -> Self {
+        self.picture = [red, green, blue];
+        self
+    }
+
+    /// Whether the cursor on the ring monitor is in this moment.
+    pub fn cursor(mut self, present: bool) -> Self {
+        self.cursor = present;
+        self
+    }
+
+    /// Output sound in this moment, at `hz`.
+    pub fn output_sound_hz(mut self, hz: u32) -> Self {
+        self.output_sound = true;
+        self.output_hz = hz;
+        self
+    }
+
+    /// The microphone in this moment, at `hz`.
+    pub fn microphone_hz(mut self, hz: u32) -> Self {
+        self.microphone = true;
+        self.microphone_hz = hz;
+        self
+    }
+}
+
+/// One encoded piece of a moment the ring is holding.
+#[derive(Clone, Debug)]
+struct MomentSlice {
+    duration: Duration,
+    picture: [u8; 3],
+    cursor: bool,
+    output_sound: bool,
+    microphone: bool,
+    output_hz: u32,
+    microphone_hz: u32,
+}
+
+impl MomentSlice {
+    fn blank(duration: Duration) -> Self {
+        Self {
+            duration,
+            picture: [0, 0, 0],
+            cursor: false,
+            output_sound: false,
+            microphone: false,
+            output_hz: 440,
+            microphone_hz: 880,
+        }
+    }
+
+    fn from_moment(moment: &MonitorMoment) -> Self {
+        Self {
+            duration: moment.elapsed,
+            picture: moment.picture,
+            cursor: moment.cursor,
+            output_sound: moment.output_sound,
+            microphone: moment.microphone,
+            output_hz: moment.output_hz,
+            microphone_hz: moment.microphone_hz,
+        }
+    }
+}
+
+/// The path the ring took from the card. The person does not choose it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HardwarePath {
+    /// NVIDIA, including the 3060 Ti and 3070 Ti.
+    Nvidia,
+    /// AMD.
+    Amd,
 }
 
 /// The encoded segment the ring is holding for its monitor.
@@ -365,6 +453,7 @@ pub struct SavedOtkat {
     microphone: bool,
     encoded: bool,
     frames_per_second: u32,
+    encoder: Encoder,
 }
 
 impl SavedOtkat {
@@ -422,6 +511,11 @@ impl SavedOtkat {
     pub fn frames_per_second(&self) -> u32 {
         self.frames_per_second
     }
+
+    /// The encoder that compresses this otkat's picture. The file stays `.mp4`.
+    pub fn encoder(&self) -> Encoder {
+        self.encoder
+    }
 }
 
 struct ProcessCommit {
@@ -459,10 +553,9 @@ struct PendingOtkat {
     width: u32,
     height: u32,
     bitrate_mbit: u8,
-    cursor: bool,
-    output_sound: bool,
-    microphone: bool,
     frames_per_second: u32,
+    encoder: Encoder,
+    slices: Vec<MomentSlice>,
     ticket: u64,
     number: u32,
     queue: Arc<OtkatQueue>,
@@ -482,73 +575,110 @@ impl std::fmt::Debug for PendingOtkat {
     }
 }
 
-fn encode_mp4(
-    path: &Path,
+/// One otkat the queue is ready to write.
+struct OtkatJob {
+    path: PathBuf,
     duration: Duration,
     width: u32,
     height: u32,
     bitrate_mbit: u8,
-    cursor: bool,
-    output_sound: bool,
-    microphone: bool,
     frames_per_second: u32,
-) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
+    encoder: Encoder,
+    slices: Vec<MomentSlice>,
+}
+
+fn encode_mp4(job: &OtkatJob) -> std::io::Result<()> {
+    if let Some(parent) = job.path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let seconds = duration.as_secs();
-    let rate = if frames_per_second == 0 {
+    let seconds = job.duration.as_secs().max(1);
+    let rate = if job.frames_per_second == 0 {
         1
     } else {
-        frames_per_second
+        job.frames_per_second
     };
-    let mut source = format!("color=c=black:s={width}x{height}:r={rate}:d={seconds}");
-    if cursor {
-        source.push_str(",drawbox=x=12:y=12:w=4:h=4:color=white:t=fill");
-    }
-    let with_sound = output_sound && microphone;
+    let slices = if job.slices.is_empty() {
+        vec![MomentSlice::blank(job.duration)]
+    } else {
+        job.slices.clone()
+    };
     let mut command = Command::new("ffmpeg");
+    command.arg("-y").arg("-loglevel").arg("error");
+    for slice in &slices {
+        let color = format!(
+            "0x{:02X}{:02X}{:02X}",
+            slice.picture[0], slice.picture[1], slice.picture[2]
+        );
+        let slice_seconds = slice.duration.as_secs().max(1);
+        command.arg("-f").arg("lavfi").arg("-i").arg(format!(
+            "color=c={color}:s={}x{}:r={rate}:d={slice_seconds}",
+            job.width, job.height
+        ));
+    }
+    let output_hz = slices.iter().find(|slice| slice.output_sound).map(|slice| slice.output_hz);
+    let microphone_hz = slices
+        .iter()
+        .find(|slice| slice.microphone)
+        .map(|slice| slice.microphone_hz);
+    let video_inputs = slices.len();
+    if let Some(hz) = output_hz {
+        command.arg("-f").arg("lavfi").arg("-i").arg(format!(
+            "sine=frequency={hz}:sample_rate=48000:d={seconds}"
+        ));
+    }
+    if let Some(hz) = microphone_hz {
+        command.arg("-f").arg("lavfi").arg("-i").arg(format!(
+            "sine=frequency={hz}:sample_rate=48000:d={seconds}"
+        ));
+    }
+    let mut filter = String::new();
+    let mut labels = Vec::new();
+    for (index, slice) in slices.iter().enumerate() {
+        let label = format!("v{index}");
+        if slice.cursor {
+            filter.push_str(&format!(
+                "[{index}:v]drawbox=x=1:y=1:w=2:h=2:color=white:t=fill[{label}];"
+            ));
+        } else {
+            filter.push_str(&format!("[{index}:v]null[{label}];"));
+        }
+        labels.push(format!("[{label}]"));
+    }
+    filter.push_str(&labels.concat());
+    filter.push_str(&format!("concat=n={}:v=1:a=0[vout]", slices.len()));
     command
-        .arg("-y")
-        .arg("-loglevel")
-        .arg("error")
-        .arg("-f")
-        .arg("lavfi")
-        .arg("-i")
-        .arg(source);
-    if with_sound {
-        command
-            .arg("-f")
-            .arg("lavfi")
-            .arg("-i")
-            .arg(format!("sine=frequency=440:sample_rate=48000:d={seconds}"))
-            .arg("-f")
-            .arg("lavfi")
-            .arg("-i")
-            .arg(format!("sine=frequency=880:sample_rate=48000:d={seconds}"))
-            .arg("-map")
-            .arg("0:v")
-            .arg("-map")
-            .arg("1:a")
-            .arg("-map")
-            .arg("2:a");
+        .arg("-filter_complex")
+        .arg(filter)
+        .arg("-map")
+        .arg("[vout]");
+    if output_hz.is_some() {
+        command.arg("-map").arg(format!("{video_inputs}:a"));
+    }
+    if microphone_hz.is_some() {
+        let index = video_inputs + usize::from(output_hz.is_some());
+        command.arg("-map").arg(format!("{index}:a"));
+    }
+    let (codec, extra): (&str, &[&str]) = match job.encoder {
+        Encoder::H264 => ("libx264", &["-preset", "ultrafast"]),
+        Encoder::Hevc => ("libx265", &["-preset", "ultrafast"]),
+        Encoder::Av1 => ("libaom-av1", &["-cpu-used", "8"]),
+    };
+    command.arg("-c:v").arg(codec);
+    for arg in extra {
+        command.arg(arg);
     }
     command
-        .arg("-c:v")
-        .arg("libx264")
-        .arg("-preset")
-        .arg("ultrafast")
         .arg("-pix_fmt")
         .arg("yuv420p")
         .arg("-b:v")
-        .arg(format!("{bitrate_mbit}M"));
-    if with_sound {
+        .arg(format!("{}M", job.bitrate_mbit));
+    if output_hz.is_some() || microphone_hz.is_some() {
         command.arg("-c:a").arg("aac");
     } else {
         command.arg("-an");
     }
     let output = command
-        .arg(path)
+        .arg(&job.path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -558,7 +688,7 @@ fn encode_mp4(
     } else {
         let detail = String::from_utf8_lossy(&output.stderr);
         if detail.contains("No space left on device") {
-            let _ = fs::remove_file(path);
+            let _ = fs::remove_file(&job.path);
         }
         Err(std::io::Error::other(format!(
             "ffmpeg exited with {}: {detail}",
@@ -567,11 +697,7 @@ fn encode_mp4(
     }
 }
 
-type OtkatWriter = Arc<
-    dyn Fn(&Path, Duration, u32, u32, u8, bool, bool, bool, u32) -> std::io::Result<()>
-        + Send
-        + Sync,
->;
+type OtkatWriter = Arc<dyn Fn(&OtkatJob) -> std::io::Result<()> + Send + Sync>;
 
 /// Otkats already taken from the ring and not yet finished as files.
 struct OtkatQueue {
@@ -637,17 +763,16 @@ impl OtkatQueue {
             }
         }
         let writer = Arc::clone(&self.writer.lock().unwrap());
-        let result = writer(
-            &pending.path,
-            pending.duration,
-            pending.width,
-            pending.height,
-            pending.bitrate_mbit,
-            pending.cursor,
-            pending.output_sound,
-            pending.microphone,
-            pending.frames_per_second,
-        );
+        let result = writer(&OtkatJob {
+            path: pending.path.clone(),
+            duration: pending.duration,
+            width: pending.width,
+            height: pending.height,
+            bitrate_mbit: pending.bitrate_mbit,
+            frames_per_second: pending.frames_per_second,
+            encoder: pending.encoder,
+            slices: pending.slices.clone(),
+        });
         if let Err(err) = result {
             // The next otkat starts only after this file is gone.
             let _ = fs::remove_file(&pending.path);
@@ -700,10 +825,17 @@ pub struct Ring {
     later_tx: mpsc::Sender<PlashkaEvent>,
     card: Option<Card>,
     encoder: Encoder,
+    hardware_path: Option<HardwarePath>,
     switch: Switch,
     home: PathBuf,
     persist_answer: bool,
     talk: Option<RingTalk>,
+    slices: Vec<MomentSlice>,
+    known_frame: Option<(u32, u32)>,
+    heard_output: bool,
+    heard_microphone: bool,
+    output_refused: bool,
+    microphone_refused: bool,
 }
 
 impl Ring {
@@ -825,9 +957,16 @@ impl Ring {
             later_tx,
             card: None,
             encoder: Encoder::H264,
+            hardware_path: None,
             switch: Switch::On,
             persist_answer: false,
             talk: None,
+            slices: Vec::new(),
+            known_frame: None,
+            heard_output: false,
+            heard_microphone: false,
+            output_refused: false,
+            microphone_refused: false,
         }
     }
 
@@ -851,6 +990,7 @@ impl Ring {
         self.talk = None;
         self.held = Duration::ZERO;
         self.segment = None;
+        self.slices.clear();
     }
 
     fn say(&self, line: &str) -> String {
@@ -936,10 +1076,13 @@ impl Ring {
         let Some(chosen) = self.screen.clone() else {
             return;
         };
-        if monitors
+        if let Some(connected) = monitors
             .iter()
-            .any(|monitor| monitor.screen.name() == chosen.name())
+            .find(|monitor| monitor.screen.name() == chosen.name())
         {
+            if let Some(frame) = connected.screen.frame() {
+                self.known_frame = Some(frame);
+            }
             return;
         }
         if monitors.len() == 1 {
@@ -962,9 +1105,13 @@ impl Ring {
             .as_ref()
             .is_some_and(|current| current.name() == screen.name())
         {
+            if let Some(frame) = screen.frame() {
+                self.known_frame = Some(frame);
+            }
             return;
         }
         self.waiting_for_screen = false;
+        self.known_frame = screen.frame();
         self.screen = Some(screen.clone());
         if let Some(segment) = self.segment.as_mut() {
             segment.monitor = screen;
@@ -986,8 +1133,21 @@ impl Ring {
     }
 
     /// The card on this machine. The chosen encoder stays as it is.
+    ///
+    /// The ring records the NVIDIA or AMD path from the card. Intel and a
+    /// machine with no hardware encoder do not take either path.
     pub fn see_card(&mut self, card: Card) {
+        self.hardware_path = match vendor_path(card) {
+            Some(VendorPath::Nvidia) => Some(HardwarePath::Nvidia),
+            Some(VendorPath::Amd) => Some(HardwarePath::Amd),
+            None => None,
+        };
         self.card = Some(card);
+    }
+
+    /// The NVIDIA or AMD path recorded from the card. Not an API name.
+    pub fn hardware_path(&self) -> Option<HardwarePath> {
+        self.hardware_path
     }
 
     /// Encoder items this card can do, in knob order.
@@ -1020,22 +1180,17 @@ impl Ring {
         let Some(monitor) = self.screen.clone() else {
             return;
         };
-        if monitor != moment.screen {
+        if monitor.name() != moment.screen.name() {
             return;
         }
         let _delivered_frames = moment.unique_frames;
-        let adding = moment.elapsed;
-        if let Some(segment) = self.segment.as_mut() {
-            segment.duration += adding;
-            self.held = segment.duration;
-            return;
+        if let Some(frame) = moment.screen.frame() {
+            self.known_frame = Some(frame);
         }
-        self.segment = Some(EncodedSegment {
-            monitor,
-            duration: adding,
-            frames_per_second: PICTURE_RATE,
-        });
-        self.held = adding;
+        self.slices.push(MomentSlice::from_moment(&moment));
+        self.trim_slices();
+        self.rebuild_segment();
+        self.store_encoded_ring();
     }
 
     /// The encoded segment the ring is holding, once its monitor has entered.
@@ -1064,13 +1219,41 @@ impl Ring {
     ///
     /// A live ring already keeps output sound with the microphone. This does
     /// not turn the clip into microphone only.
-    pub fn output_sound(&mut self) {}
+    pub fn output_sound(&mut self) {
+        self.heard_output = true;
+        for slice in &mut self.slices {
+            if !slice.output_sound {
+                slice.output_sound = true;
+                slice.output_hz = 440;
+            }
+        }
+    }
 
     /// The microphone arrived. It does not ask which screen to give.
     ///
     /// While the ring holds its monitor, the microphone is in the clip.
     /// There is no microphone-only mode to turn on.
-    pub fn microphone(&mut self) {}
+    pub fn microphone(&mut self) {
+        self.heard_microphone = true;
+        for slice in &mut self.slices {
+            if !slice.microphone {
+                slice.microphone = true;
+                slice.microphone_hz = 880;
+            }
+        }
+    }
+
+    /// Output sound is not available. A bind raises the same no-access plashka
+    /// as a missing screen answer.
+    pub fn refuse_output_sound(&mut self) {
+        self.output_refused = true;
+    }
+
+    /// The microphone is not available. A bind raises the same no-access plashka
+    /// as a missing screen answer.
+    pub fn refuse_microphone(&mut self) {
+        self.microphone_refused = true;
+    }
 
     /// The ring holds `held` of encoded time.
     ///
@@ -1085,7 +1268,15 @@ impl Ring {
             let _ = self.say(&format!("hold\t{}", held.as_secs()));
             return;
         }
-        self.held = held;
+        let kept = held.min(self.chosen_length);
+        self.slices.clear();
+        self.heard_output = false;
+        self.heard_microphone = false;
+        if !kept.is_zero() {
+            self.slices.push(MomentSlice::blank(kept));
+        }
+        self.held = kept;
+        self.rebuild_segment();
         self.store_encoded_ring();
     }
 
@@ -1107,11 +1298,8 @@ impl Ring {
     where
         F: Fn(&Path, Duration) -> std::io::Result<()> + Send + Sync + 'static,
     {
-        *self.queue.writer.lock().unwrap() = Arc::new(
-            move |path, duration, _width, _height, _bitrate, _cursor, _sound, _microphone, _rate| {
-                write(path, duration)
-            },
-        );
+        *self.queue.writer.lock().unwrap() =
+            Arc::new(move |job: &OtkatJob| write(&job.path, job.duration));
     }
 
     /// The face hands the ring the switch.
@@ -1141,6 +1329,9 @@ impl Ring {
             return;
         }
         self.chosen_length = Duration::from_secs(seconds);
+        self.trim_slices();
+        self.rebuild_segment();
+        self.store_encoded_ring();
     }
 
     /// The face hands the ring a new bind.
@@ -1200,7 +1391,7 @@ impl Ring {
         if self.switch == Switch::Off {
             return Some(PlashkaEvent::RingOff);
         }
-        if self.waiting_for_screen {
+        if self.waiting_for_screen || self.output_refused || self.microphone_refused {
             return Some(PlashkaEvent::NoAccess);
         }
         if self.held.is_zero() {
@@ -1213,29 +1404,22 @@ impl Ring {
             return Some(PlashkaEvent::NoSpace);
         }
         let day = (self.clock)();
-        let duration = self.held.min(self.chosen_length);
+        let slices = self.slices_for_save();
+        let duration = slices
+            .iter()
+            .map(|slice| slice.duration)
+            .sum::<Duration>()
+            .min(self.chosen_length);
         let (ticket, number) = self.queue.reserve(&self.otkat_folder);
         let name = format!("otkat{number}-{}.mp4", day.label());
         let path = self.otkat_folder.join(&name);
-        let (width, height) = self
-            .screen
-            .as_ref()
-            .and_then(Screen::frame)
-            .map(|(width, height)| {
-                let percent = u32::from(self.resolution_share.percent());
-                (
-                    even_pixels(width * percent / 100),
-                    even_pixels(height * percent / 100),
-                )
-            })
-            .unwrap_or(STAND_IN_FRAME);
+        let (width, height) = self.encoded_frame();
         let bitrate_mbit = self.bitrate.mbit_per_sec();
         let monitor = self.segment.as_ref().map(|segment| segment.monitor.clone());
-        let live = monitor.is_some();
-        let cursor_in_picture = live;
-        let output_sound = live;
-        let microphone = live;
-        let frames_per_second = if live { PICTURE_RATE } else { 0 };
+        let cursor_in_picture = slices.iter().any(|slice| slice.cursor);
+        let output_sound = slices.iter().any(|slice| slice.output_sound);
+        let microphone = slices.iter().any(|slice| slice.microphone);
+        let frames_per_second = if monitor.is_some() { PICTURE_RATE } else { 0 };
         Some(PlashkaEvent::Saved(SavedOtkat {
             name,
             duration,
@@ -1248,10 +1432,9 @@ impl Ring {
                 width,
                 height,
                 bitrate_mbit,
-                cursor: cursor_in_picture,
-                output_sound,
-                microphone,
                 frames_per_second,
+                encoder: self.encoder,
+                slices,
                 ticket,
                 number,
                 queue: Arc::clone(&self.queue),
@@ -1263,6 +1446,7 @@ impl Ring {
             microphone,
             encoded: true,
             frames_per_second,
+            encoder: self.encoder,
         }))
     }
 
@@ -1299,6 +1483,7 @@ impl Ring {
                     microphone: false,
                     encoded: true,
                     frames_per_second: 0,
+                    encoder: Encoder::H264,
                 }))
             }
             _ => None,
@@ -1308,7 +1493,74 @@ impl Ring {
     fn forget_held(&mut self) {
         self.held = Duration::ZERO;
         self.segment = None;
+        self.slices.clear();
+        self.heard_output = false;
+        self.heard_microphone = false;
         let _ = fs::remove_file(self.ring_folder.join("segment.mp4"));
+    }
+
+    fn trim_slices(&mut self) {
+        let limit = self.chosen_length;
+        loop {
+            let total: Duration = self.slices.iter().map(|slice| slice.duration).sum();
+            if total <= limit || self.slices.is_empty() {
+                self.held = total;
+                return;
+            }
+            let extra = total - limit;
+            if self.slices[0].duration <= extra {
+                self.slices.remove(0);
+            } else {
+                self.slices[0].duration -= extra;
+            }
+        }
+    }
+
+    fn rebuild_segment(&mut self) {
+        let Some(monitor) = self.screen.clone() else {
+            self.segment = None;
+            return;
+        };
+        if self.slices.is_empty() {
+            self.segment = None;
+            return;
+        }
+        self.segment = Some(EncodedSegment {
+            monitor,
+            duration: self.held,
+            frames_per_second: PICTURE_RATE,
+        });
+    }
+
+    fn slices_for_save(&self) -> Vec<MomentSlice> {
+        if self.slices.is_empty() {
+            if self.held.is_zero() {
+                Vec::new()
+            } else {
+                vec![MomentSlice::blank(self.held.min(self.chosen_length))]
+            }
+        } else {
+            self.slices.clone()
+        }
+    }
+
+    fn encoded_frame(&self) -> (u32, u32) {
+        let Some((width, height)) = self
+            .screen
+            .as_ref()
+            .and_then(Screen::frame)
+            .or(self.known_frame)
+        else {
+            return STAND_IN_FRAME;
+        };
+        let percent = u32::from(self.resolution_share.percent());
+        let width = even_pixels(width * percent / 100);
+        let height = even_pixels(height * percent / 100);
+        if width == 0 || height == 0 {
+            STAND_IN_FRAME
+        } else {
+            (width, height)
+        }
     }
 
     /// On disk, the encoded ring is a file in the ring folder. In memory, it is not.
@@ -1317,26 +1569,22 @@ impl Ring {
             return;
         }
         let path = self.ring_folder.join("segment.mp4");
-        if self.held.is_zero() {
+        if self.held.is_zero() || self.slices.is_empty() {
             let _ = fs::remove_file(&path);
             return;
         }
-        let (width, height) = self
-            .screen
-            .as_ref()
-            .and_then(Screen::frame)
-            .unwrap_or(STAND_IN_FRAME);
-        if let Err(err) = encode_mp4(
-            &path,
-            self.held,
+        let (width, height) = self.encoded_frame();
+        let job = OtkatJob {
+            path,
+            duration: self.held,
             width,
             height,
-            self.bitrate.mbit_per_sec(),
-            false,
-            false,
-            false,
-            PICTURE_RATE,
-        ) {
+            bitrate_mbit: self.bitrate.mbit_per_sec(),
+            frames_per_second: PICTURE_RATE,
+            encoder: self.encoder,
+            slices: self.slices.clone(),
+        };
+        if let Err(err) = encode_mp4(&job) {
             eprintln!("encoded ring was not stored: {err}");
         }
     }

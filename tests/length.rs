@@ -4,7 +4,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use otkati::{BindDay, PlashkaEvent, Ring};
+use otkati::{BindDay, MonitorMoment, PlashkaEvent, Ring, Screen};
 
 struct OtkatFolder {
     path: PathBuf,
@@ -152,6 +152,77 @@ fn a_fraction_of_a_second_does_not_change_the_aim() {
         mp4_duration_secs(&folder.path.join("otkat1-2026-10-25.mp4")),
         90
     );
+}
+
+#[test]
+fn a_later_bind_saves_the_tail_not_a_new_clip_of_the_old_head() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    let screen = Screen::new("desk");
+    ring.remember_screen(screen.clone());
+    ring.take_length(Duration::from_secs(15));
+    ring.take_monitor(
+        MonitorMoment::new(screen.clone(), Duration::from_secs(10))
+            .picture(200, 0, 0)
+            .cursor(false),
+    );
+    ring.take_monitor(
+        MonitorMoment::new(screen, Duration::from_secs(10))
+            .picture(0, 0, 200)
+            .cursor(false),
+    );
+
+    assert_eq!(
+        ring.segment()
+            .expect("the ring keeps the newest moments")
+            .duration(),
+        Duration::from_secs(15)
+    );
+
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.duration(), Duration::from_secs(15));
+    let path = folder.path.join(saved.name());
+    drop(event);
+
+    let early = pixel_at(&path, 1.0);
+    let later = pixel_at(&path, 6.0);
+    assert!(
+        early.0 > 150 && early.2 < 40,
+        "the older moment is only the start of the tail, got {early:?}"
+    );
+    assert!(
+        later.2 > 150 && later.0 < 40,
+        "a later moment is what the bind saves, got {later:?}"
+    );
+}
+
+fn pixel_at(path: &Path, at_secs: f64) -> (u8, u8, u8) {
+    let output = Command::new("ffmpeg")
+        .arg("-v")
+        .arg("error")
+        .arg("-ss")
+        .arg(at_secs.to_string())
+        .arg("-i")
+        .arg(path)
+        .arg("-frames:v")
+        .arg("1")
+        .arg("-f")
+        .arg("rawvideo")
+        .arg("-pix_fmt")
+        .arg("rgb24")
+        .arg("-")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "ffmpeg failed to read a frame: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stdout.len() >= 3);
+    (output.stdout[0], output.stdout[1], output.stdout[2])
 }
 
 #[test]

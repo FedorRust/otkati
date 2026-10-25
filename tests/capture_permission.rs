@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use otkati::{PlashkaEvent, Ring, Screen};
 
@@ -106,6 +106,42 @@ fn output_sound_and_microphone_do_not_raise_the_screen_question() {
 
     assert!(!ring.asks_which_screen());
     assert_eq!(ring.monitor(), Some(&screen));
+}
+
+#[test]
+fn no_output_sound_access_raises_the_same_no_access_plashka() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::enter_session(folder.path.clone(), Some(Screen::new("desk")));
+    ring.hold(Duration::from_secs(2));
+    ring.refuse_output_sound();
+
+    assert_eq!(
+        ring.bind(Ring::default_bind()),
+        Some(PlashkaEvent::NoAccess)
+    );
+    let written: Vec<_> = fs::read_dir(&folder.path).unwrap().collect();
+    assert!(
+        written.is_empty(),
+        "no output-sound access does not write an otkat"
+    );
+}
+
+#[test]
+fn no_microphone_access_raises_the_same_no_access_plashka() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::enter_session(folder.path.clone(), Some(Screen::new("desk")));
+    ring.hold(Duration::from_secs(2));
+    ring.refuse_microphone();
+
+    assert_eq!(
+        ring.bind(Ring::default_bind()),
+        Some(PlashkaEvent::NoAccess)
+    );
+    let written: Vec<_> = fs::read_dir(&folder.path).unwrap().collect();
+    assert!(
+        written.is_empty(),
+        "no microphone access does not write an otkat"
+    );
 }
 
 #[test]
