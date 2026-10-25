@@ -63,4 +63,27 @@ TestCase {
         compare(again.settingsVisible, true)
         compare(again.firstLaunchVisible, false)
     }
+
+    function test_the_overlay_covers_only_the_ring_monitor() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.cataloguePath = filePath("themes")
+        face.shellSettingsPath = filePath("shell-north.json")
+        face.matugenColorsPath = filePath("matugen-colors.json")
+        face.themeStorePath = freshStore()
+        face.monitors = [
+            { name: "desk", width: 1920, height: 1080 },
+            { name: "side", width: 1280, height: 800 }
+        ]
+        face.ringMonitor = "desk"
+        face.openSettings()
+
+        compare(face.firstLaunchVisible, true)
+        compare(face.firstLaunchMonitor, "desk")
+        compare(face.overlayCovers("desk"), true)
+        compare(face.overlayCovers("side"), false)
+        compare(face.firstLaunchFullScreen, true)
+        compare(face.firstLaunchWidth, 1920)
+        compare(face.firstLaunchHeight, 1080)
+    }
 }

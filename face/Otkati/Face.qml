@@ -54,7 +54,17 @@ Window {
     property var settingsSurface: null
     property var firstLaunchOverlay: null
     property bool firstLaunchPlayed: false
+    // Connected monitors, and the one the ring is on. The overlay covers only that one.
+    property var monitors: []
+    property string ringMonitor: ""
     readonly property bool firstLaunchVisible: firstLaunchOverlay !== null && firstLaunchOverlay.visible
+    readonly property string firstLaunchMonitor: firstLaunchOverlay ? firstLaunchOverlay.monitorName : ""
+    readonly property int firstLaunchWidth: firstLaunchOverlay ? firstLaunchOverlay.width : 0
+    readonly property int firstLaunchHeight: firstLaunchOverlay ? firstLaunchOverlay.height : 0
+    readonly property bool firstLaunchFullScreen: firstLaunchOverlay !== null
+            && firstLaunchOverlay.coversMonitor
+            && firstLaunchOverlay.width === firstLaunchOverlay.monitorWidth
+            && firstLaunchOverlay.height === firstLaunchOverlay.monitorHeight
     readonly property color settingsColor: settingsSurface ? settingsSurface.color : "transparent"
     readonly property color settingsTextColor: settingsSurface ? settingsSurface.ink : "transparent"
     readonly property bool settingsVisible: settingsSurface ? settingsSurface.visible : false
@@ -183,13 +193,58 @@ Window {
         settingsSurface.visible = true
     }
 
+    function ringMonitorGeometry() {
+        for (let i = 0; i < monitors.length; i++) {
+            if (!ringMonitor || monitors[i].name === ringMonitor)
+                return monitors[i]
+        }
+        return {
+            name: ringMonitor || Screen.name,
+            width: Screen.width,
+            height: Screen.height
+        }
+    }
+
+    function screenNamed(name) {
+        const screens = Qt.application.screens
+        for (let i = 0; i < screens.length; i++) {
+            if (screens[i].name === name)
+                return screens[i]
+        }
+        return null
+    }
+
     function playFirstLaunch() {
         if (firstLaunchPlayed)
             return
         firstLaunchPlayed = true
         rememberTheme()
-        if (!firstLaunchOverlay)
-            firstLaunchOverlay = firstLaunchComponent.createObject(null)
+        if (firstLaunchOverlay)
+            return
+        const monitor = ringMonitorGeometry()
+        const overlay = firstLaunchComponent.createObject(null, {
+            monitorName: monitor.name,
+            monitorWidth: monitor.width,
+            monitorHeight: monitor.height,
+            width: monitor.width,
+            height: monitor.height,
+            coversMonitor: true
+        })
+        const screen = screenNamed(monitor.name)
+        if (screen) {
+            overlay.screen = screen
+            overlay.visibility = Window.FullScreen
+            if (overlay.width !== monitor.width || overlay.height !== monitor.height) {
+                overlay.visibility = Window.Windowed
+                overlay.width = monitor.width
+                overlay.height = monitor.height
+            }
+        }
+        firstLaunchOverlay = overlay
+    }
+
+    function overlayCovers(name) {
+        return firstLaunchVisible && firstLaunchMonitor === name
     }
 
     function continueFirstLaunch() {
@@ -489,6 +544,10 @@ Window {
     Component {
         id: firstLaunchComponent
         Window {
+            property string monitorName: ""
+            property int monitorWidth: 0
+            property int monitorHeight: 0
+            property bool coversMonitor: false
             width: 640
             height: 480
             visible: true
