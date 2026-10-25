@@ -140,6 +140,7 @@ fn changing_the_share_leaves_the_bitrate() {
     assert_eq!(half.width(), 960);
     assert_eq!(half.height(), 540);
     assert_eq!(half.bitrate_mbit(), 40);
+    drop(half);
 
     ring.take_resolution_share(ResolutionShare::new(100).expect("100 is a resolution share"));
     let full = saved_otkat(&mut ring);
