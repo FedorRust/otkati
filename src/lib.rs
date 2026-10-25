@@ -30,6 +30,9 @@ pub enum Card {
     Nvidia3070Ti,
     /// NVIDIA from the 40 series on.
     Nvidia40Series,
+    /// An AMD card. `hevc` is whether this card can do HEVC.
+    /// `rx_7000` is whether it is an RX 7000 or newer.
+    Amd { hevc: bool, rx_7000: bool },
 }
 
 /// The key combination that asks the ring to save an otkat.
@@ -317,10 +320,14 @@ impl Ring {
     /// Until the ring has seen a card, the only item is H.264.
     pub fn offered_encoders(&self) -> Vec<Encoder> {
         let mut offered = vec![Encoder::H264];
-        if matches!(
-            self.card,
-            Some(Card::Nvidia3060Ti | Card::Nvidia3070Ti | Card::Nvidia40Series)
-        ) {
+        if match self.card {
+            Some(Card::Nvidia3060Ti | Card::Nvidia3070Ti | Card::Nvidia40Series) => true,
+            Some(Card::Amd {
+                hevc: true,
+                rx_7000: false,
+            }) => true,
+            _ => false,
+        } {
             offered.push(Encoder::Hevc);
         }
         if matches!(self.card, Some(Card::Nvidia40Series)) {

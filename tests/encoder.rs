@@ -132,3 +132,24 @@ fn a_40_series_card_offers_av1_and_the_otkat_stays_mp4() {
     };
     assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
 }
+
+#[test]
+fn an_amd_card_that_can_do_hevc_offers_it_and_not_av1() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::new(folder.path.clone());
+    ring.see_card(Card::Amd {
+        hevc: true,
+        rx_7000: false,
+    });
+
+    assert_eq!(ring.encoder(), Encoder::H264);
+    assert_eq!(
+        ring.offered_encoders(),
+        vec![Encoder::H264, Encoder::Hevc]
+    );
+
+    ring.take_encoder(Encoder::Av1);
+    assert_eq!(ring.encoder(), Encoder::H264);
+    ring.take_encoder(Encoder::Hevc);
+    assert_eq!(ring.encoder(), Encoder::Hevc);
+}
