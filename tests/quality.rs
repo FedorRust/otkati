@@ -85,7 +85,7 @@ fn the_share_applies_to_each_side_of_the_monitor() {
     ring.remember_screen(Screen::with_frame("desk", 1920, 1080));
     ring.hold(Duration::from_secs(1));
 
-    ring.take_resolution_share(ResolutionShare::new(50));
+    ring.take_resolution_share(ResolutionShare::new(50).expect("50 is a resolution share"));
     let half = saved_otkat(&mut ring);
     assert_eq!(half.width(), 960);
     assert_eq!(half.height(), 540);
@@ -93,7 +93,7 @@ fn the_share_applies_to_each_side_of_the_monitor() {
     drop(half);
     assert_eq!(mp4_frame(&half_path), (960, 540));
 
-    ring.take_resolution_share(ResolutionShare::new(70));
+    ring.take_resolution_share(ResolutionShare::new(70).expect("70 is a resolution share"));
     let seventy = saved_otkat(&mut ring);
     assert_eq!(seventy.width(), 1344);
     assert_eq!(seventy.height(), 756);
@@ -109,7 +109,7 @@ fn width_and_height_come_out_even() {
     ring.hold(Duration::from_secs(1));
 
     ring.remember_screen(Screen::with_frame("desk", 1919, 1079));
-    ring.take_resolution_share(ResolutionShare::new(100));
+    ring.take_resolution_share(ResolutionShare::new(100).expect("100 is a resolution share"));
     let full = saved_otkat(&mut ring);
     assert_eq!(full.width(), 1918);
     assert_eq!(full.height(), 1078);
@@ -118,7 +118,7 @@ fn width_and_height_come_out_even() {
     assert_eq!(mp4_frame(&full_path), (1918, 1078));
 
     ring.remember_screen(Screen::with_frame("laptop", 1366, 768));
-    ring.take_resolution_share(ResolutionShare::new(90));
+    ring.take_resolution_share(ResolutionShare::new(90).expect("90 is a resolution share"));
     let scaled = saved_otkat(&mut ring);
     assert_eq!(scaled.width(), 1228);
     assert_eq!(scaled.height(), 690);
@@ -135,15 +135,44 @@ fn changing_the_share_leaves_the_bitrate() {
     ring.hold(Duration::from_secs(1));
     ring.take_bitrate(Bitrate::new(40));
 
-    ring.take_resolution_share(ResolutionShare::new(50));
+    ring.take_resolution_share(ResolutionShare::new(50).expect("50 is a resolution share"));
     let half = saved_otkat(&mut ring);
     assert_eq!(half.width(), 960);
     assert_eq!(half.height(), 540);
     assert_eq!(half.bitrate_mbit(), 40);
 
-    ring.take_resolution_share(ResolutionShare::new(100));
+    ring.take_resolution_share(ResolutionShare::new(100).expect("100 is a resolution share"));
     let full = saved_otkat(&mut ring);
     assert_eq!(full.width(), 1920);
     assert_eq!(full.height(), 1080);
     assert_eq!(full.bitrate_mbit(), 40);
+}
+
+#[test]
+fn the_share_runs_from_50_to_100_in_steps_of_10() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.remember_screen(Screen::with_frame("desk", 1920, 1080));
+    ring.hold(Duration::from_secs(1));
+
+    let frames = [
+        (50, 960, 540),
+        (60, 1152, 648),
+        (70, 1344, 756),
+        (80, 1536, 864),
+        (90, 1728, 972),
+        (100, 1920, 1080),
+    ];
+    for (percent, width, height) in frames {
+        let share = ResolutionShare::new(percent).expect("a ten-percent step from 50 to 100");
+        ring.take_resolution_share(share);
+        let saved = saved_otkat(&mut ring);
+        assert_eq!(saved.width(), width, "{percent}%");
+        assert_eq!(saved.height(), height, "{percent}%");
+        drop(saved);
+    }
+
+    assert!(ResolutionShare::new(40).is_none());
+    assert!(ResolutionShare::new(55).is_none());
+    assert!(ResolutionShare::new(110).is_none());
 }

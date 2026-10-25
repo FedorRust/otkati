@@ -48,9 +48,15 @@ pub struct ResolutionShare {
 }
 
 impl ResolutionShare {
-    /// `percent` of each side. The ring starts at 100.
-    pub fn new(percent: u8) -> Self {
-        Self { percent }
+    /// `percent` of each side, from 50 to 100 in steps of 10.
+    ///
+    /// Any other percent is not a resolution share.
+    pub fn new(percent: u8) -> Option<Self> {
+        if (50..=100).contains(&percent) && percent % 10 == 0 {
+            Some(Self { percent })
+        } else {
+            None
+        }
     }
 
     /// The percent of each side.
@@ -61,7 +67,7 @@ impl ResolutionShare {
 
 impl Default for ResolutionShare {
     fn default() -> Self {
-        Self { percent: 100 }
+        Self::new(100).expect("100 is a resolution share")
     }
 }
 
