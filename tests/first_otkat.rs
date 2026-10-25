@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use otkati::{BindDay, PlashkaEvent, Ring};
@@ -103,4 +104,78 @@ fn a_missing_number_in_the_folder_is_not_reused() {
     assert!(folder.path.join("otkat3-2026-10-24.mp4").is_file());
     assert!(folder.path.join("otkat4-2026-10-25.mp4").is_file());
     assert!(!folder.path.join("otkat2-2026-10-25.mp4").exists());
+}
+
+#[test]
+fn the_otkat_number_does_not_restart_on_a_new_day() {
+    let folder = OtkatFolder::new();
+    fs::write(folder.path.join("otkat5-2026-10-24.mp4"), b"kept").unwrap();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.hold(Duration::from_secs(120));
+
+    let event = ring.bind();
+
+    let PlashkaEvent::Saved(saved) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.name(), "otkat6-2026-10-25.mp4");
+    drop(event);
+
+    assert!(folder.path.join("otkat5-2026-10-24.mp4").is_file());
+    assert!(folder.path.join("otkat6-2026-10-25.mp4").is_file());
+    assert!(!folder.path.join("otkat1-2026-10-25.mp4").exists());
+}
+
+#[test]
+fn the_file_keeps_the_bind_day_when_the_write_finishes_after_midnight() {
+    let folder = OtkatFolder::new();
+    let day = Arc::new(AtomicU8::new(25));
+    let clock_day = Arc::clone(&day);
+    let mut ring = Ring::with_clock(folder.path.clone(), move || {
+        BindDay::new(2026, 10, clock_day.load(Ordering::SeqCst))
+    });
+    ring.hold(Duration::from_secs(120));
+
+    let event = ring.bind();
+    let PlashkaEvent::Saved(saved) = &event else {
+        panic!("expected a saved otkat, got {event:?}");
+    };
+    assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
+    day.store(26, Ordering::SeqCst);
+    drop(event);
+
+    assert!(folder.path.join("otkat1-2026-10-25.mp4").is_file());
+    assert!(!folder.path.join("otkat1-2026-10-26.mp4").exists());
+}
+
+#[test]
+fn the_ring_keeps_turning_and_the_next_bind_writes_another_file() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::with_clock(folder.path.clone(), || BindDay::new(2026, 10, 25));
+    ring.hold(Duration::from_secs(120));
+
+    let first = ring.bind();
+    let PlashkaEvent::Saved(saved) = &first else {
+        panic!("expected a saved otkat, got {first:?}");
+    };
+    assert_eq!(saved.name(), "otkat1-2026-10-25.mp4");
+    assert_eq!(saved.duration(), Duration::from_secs(120));
+    drop(first);
+
+    let second = ring.bind();
+    let PlashkaEvent::Saved(saved) = &second else {
+        panic!("expected the ring to still be turning, got {second:?}");
+    };
+    assert_eq!(saved.name(), "otkat2-2026-10-25.mp4");
+    assert_eq!(saved.duration(), Duration::from_secs(120));
+    drop(second);
+
+    assert_eq!(
+        mp4_duration_secs(&folder.path.join("otkat1-2026-10-25.mp4")),
+        120
+    );
+    assert_eq!(
+        mp4_duration_secs(&folder.path.join("otkat2-2026-10-25.mp4")),
+        120
+    );
 }
