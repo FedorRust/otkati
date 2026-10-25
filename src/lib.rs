@@ -39,6 +39,15 @@ impl BindDay {
     }
 }
 
+/// The switch the face hands the ring.
+///
+/// Off stops the ring. The process keeps running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Switch {
+    On,
+    Off,
+}
+
 /// A screen the person can give the program.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Screen {
@@ -71,6 +80,8 @@ pub enum PlashkaEvent {
     NoAccess,
     /// The otkat folder could not be created, so there is no file.
     FolderNotCreated,
+    /// The ring is off, so the bind saves nothing.
+    RingOff,
 }
 
 impl PartialEq for PlashkaEvent {
@@ -79,6 +90,7 @@ impl PartialEq for PlashkaEvent {
             (Self::NothingToSave, Self::NothingToSave) => true,
             (Self::NoAccess, Self::NoAccess) => true,
             (Self::FolderNotCreated, Self::FolderNotCreated) => true,
+            (Self::RingOff, Self::RingOff) => true,
             (Self::Saved(left), Self::Saved(right)) => {
                 left.name == right.name && left.duration == right.duration
             }
@@ -181,6 +193,7 @@ pub struct Ring {
     waiting_for_screen: bool,
     screen: Option<Screen>,
     bind: Bind,
+    switch: Switch,
 }
 
 impl Ring {
@@ -216,6 +229,7 @@ impl Ring {
             waiting_for_screen: false,
             screen: None,
             bind: Self::default_bind(),
+            switch: Switch::On,
         }
     }
 
@@ -235,6 +249,7 @@ impl Ring {
             waiting_for_screen,
             screen: remembered,
             bind: Self::default_bind(),
+            switch: Switch::On,
         }
     }
 
@@ -269,9 +284,27 @@ impl Ring {
 
     /// The ring holds `held` of encoded time.
     ///
-    /// Live capture from the monitor fills this in a later ticket.
+    /// While the switch is off the ring is not gathering, so this leaves the
+    /// ring unchanged. Live capture from the monitor fills this in a later ticket.
     pub fn hold(&mut self, held: Duration) {
+        if self.switch == Switch::Off {
+            return;
+        }
         self.held = held;
+    }
+
+    /// The face hands the ring the switch.
+    ///
+    /// [`Switch::Off`] stops the ring and does not end the process. A bind
+    /// then answers with [`PlashkaEvent::RingOff`] and writes no otkat.
+    /// [`Switch::On`] after that starts the ring over, so minutes from before
+    /// the switch and while it was off are not in the next otkat.
+    pub fn take_switch(&mut self, switch: Switch) {
+        let turning_on = self.switch == Switch::Off && switch == Switch::On;
+        self.switch = switch;
+        if self.switch == Switch::Off || turning_on {
+            self.held = Duration::ZERO;
+        }
     }
 
     /// The face hands the ring a new bind.
@@ -292,8 +325,9 @@ impl Ring {
 
     /// `chord` reached the ring.
     ///
-    /// When it is not the ring's bind, nothing is saved. When the session is
-    /// still waiting for the person's screen, answers with
+    /// When it is not the ring's bind, nothing is saved. When the ring is off,
+    /// answers with [`PlashkaEvent::RingOff`]. When the session is still
+    /// waiting for the person's screen, answers with
     /// [`PlashkaEvent::NoAccess`]. When the ring holds no frame, answers with
     /// [`PlashkaEvent::NothingToSave`]. When the otkat folder cannot be
     /// created, answers with [`PlashkaEvent::FolderNotCreated`]. None of those
@@ -303,6 +337,9 @@ impl Ring {
     pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
         if chord != self.bind {
             return None;
+        }
+        if self.switch == Switch::Off {
+            return Some(PlashkaEvent::RingOff);
         }
         if self.waiting_for_screen {
             return Some(PlashkaEvent::NoAccess);
