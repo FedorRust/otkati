@@ -76,7 +76,31 @@ Window {
         settingsSurface.visible = true
     }
 
+    function storedTheme() {
+        const stored = readJson(themeStorePath)
+        if (!stored || !stored.name)
+            return null
+        const colors = colorSet(stored.colors)
+        if (!colors)
+            return null
+        return { name: stored.name, colors: colors }
+    }
+
+    function rememberTheme() {
+        if (!themeStorePath || !themeName)
+            return
+        Files.writeText(themeStorePath, JSON.stringify({
+            name: themeName,
+            colors: themeColors
+        }))
+    }
+
     function openSettings() {
+        const stored = storedTheme()
+        if (stored) {
+            applyTheme(stored.name, stored.colors)
+            return
+        }
         let settings
         try {
             settings = JSON.parse(Files.readText(shellSettingsPath))
@@ -88,6 +112,7 @@ Window {
         if (!colors)
             return
         applyTheme(theme.activePreset || "", colors)
+        rememberTheme()
     }
 
     Component.onDestruction: {

@@ -28,14 +28,19 @@ TestCase {
         return url + "/otkati-theme-" + storeSerial + "-" + Date.now() + ".json"
     }
 
-    function openedFace() {
+    function faceOn(shellFile, store, matugenFile) {
         const face = createTemporaryObject(faceComponent, null)
         verify(face)
         face.cataloguePath = filePath("themes")
-        face.shellSettingsPath = filePath("shell-north.json")
-        face.themeStorePath = freshStore()
+        face.shellSettingsPath = filePath(shellFile)
+        face.matugenColorsPath = filePath(matugenFile || "matugen-colors.json")
+        face.themeStorePath = store
         face.openSettings()
         return face
+    }
+
+    function openedFace() {
+        return faceOn("shell-north.json", freshStore())
     }
 
     function test_first_open_takes_the_theme_serpantinum_has_on_now() {
@@ -101,5 +106,46 @@ TestCase {
         compare(face.themeColors.yellow, "#77889a")
         compare(face.themeColors.maroon, "#8899aa")
         compare(face.themeColors.teal, "#8899ab")
+    }
+
+    function test_a_later_shell_repaint_does_not_repaint_this_program() {
+        const store = freshStore()
+        const first = faceOn("shell-north.json", store)
+        compare(first.themeName, "North")
+        compare(first.settingsColor, "#101418")
+
+        first.shellSettingsPath = filePath("shell-matugen.json")
+        first.openSettings()
+        compare(first.themeName, "North")
+        compare(first.settingsColor, "#101418")
+        compare(first.themeColors.text, "#e6edf3")
+        compare(first.themeColors.blue, "#7eb6ff")
+
+        const again = faceOn("shell-matugen.json", store)
+        compare(again.themeName, "North")
+        compare(again.settingsColor, "#101418")
+        compare(again.themeColors.text, "#e6edf3")
+        compare(again.themeColors.blue, "#7eb6ff")
+    }
+
+    function test_a_later_wallpaper_does_not_repaint_a_stored_matugen() {
+        const store = freshStore()
+        const first = faceOn("shell-matugen.json", store)
+        compare(first.themeName, "Matugen")
+        compare(first.settingsColor, "#112233")
+        compare(first.themeColors.text, "#abcabc")
+        compare(first.themeColors.blue, "#445566")
+
+        first.matugenColorsPath = filePath("matugen-colors-later.json")
+        first.openSettings()
+        compare(first.settingsColor, "#112233")
+        compare(first.themeColors.text, "#abcabc")
+        compare(first.themeColors.blue, "#445566")
+
+        const again = faceOn("shell-matugen.json", store, "matugen-colors-later.json")
+        compare(again.themeName, "Matugen")
+        compare(again.settingsColor, "#112233")
+        compare(again.themeColors.text, "#abcabc")
+        compare(again.themeColors.blue, "#445566")
     }
 }
