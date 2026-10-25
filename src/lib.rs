@@ -1,6 +1,8 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// The key combination that asks the ring to save an otkat.
@@ -89,7 +91,9 @@ impl Eq for PlashkaEvent {}
 /// The otkat a bind took from the ring.
 ///
 /// The name and duration are fixed when the bind is pressed. The file appears
-/// in the otkat folder when this value is dropped.
+/// in the otkat folder when this value is dropped. A later bind while this
+/// file is still unwritten keeps its own name and moment; the queue writes
+/// one file at a time, in bind order.
 #[derive(Debug)]
 pub struct SavedOtkat {
     name: String,
@@ -112,21 +116,33 @@ impl SavedOtkat {
 impl Drop for SavedOtkat {
     fn drop(&mut self) {
         if let Some(pending) = self.pending.take() {
-            if let Err(err) = pending.write() {
-                eprintln!("otkat was not written: {err}");
-            }
+            let queue = Arc::clone(&pending.queue);
+            queue.write_when_its_turn(pending);
         }
     }
 }
 
-#[derive(Debug)]
 struct PendingOtkat {
     path: PathBuf,
     duration: Duration,
+    ticket: u64,
+    number: u32,
+    queue: Arc<OtkatQueue>,
+}
+
+impl std::fmt::Debug for PendingOtkat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PendingOtkat")
+            .field("path", &self.path)
+            .field("duration", &self.duration)
+            .field("ticket", &self.ticket)
+            .field("number", &self.number)
+            .finish_non_exhaustive()
+    }
 }
 
 impl PendingOtkat {
-    fn write(self) -> std::io::Result<()> {
+    fn encode(&self) -> std::io::Result<()> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -163,6 +179,68 @@ impl PendingOtkat {
     }
 }
 
+/// Otkats already taken from the ring and not yet finished as files.
+struct OtkatQueue {
+    inner: Mutex<QueueInner>,
+    turn: Condvar,
+}
+
+struct QueueInner {
+    next_ticket: u64,
+    next_to_write: u64,
+    outstanding: BTreeSet<u32>,
+}
+
+impl OtkatQueue {
+    fn new() -> Self {
+        Self {
+            inner: Mutex::new(QueueInner {
+                next_ticket: 1,
+                next_to_write: 1,
+                outstanding: BTreeSet::new(),
+            }),
+            turn: Condvar::new(),
+        }
+    }
+
+    /// The next number, counting files already in the folder and otkats
+    /// taken from the ring whose files are not there yet.
+    fn reserve(&self, folder: &Path) -> (u64, u32) {
+        let mut inner = self.inner.lock().unwrap();
+        let from_disk = next_otkat_number(folder);
+        let from_queue = inner
+            .outstanding
+            .iter()
+            .next_back()
+            .map(|number| number + 1)
+            .unwrap_or(1);
+        let number = from_disk.max(from_queue);
+        inner.outstanding.insert(number);
+        let ticket = inner.next_ticket;
+        inner.next_ticket += 1;
+        (ticket, number)
+    }
+
+    fn write_when_its_turn(&self, pending: PendingOtkat) {
+        {
+            let mut inner = self.inner.lock().unwrap();
+            while inner.next_to_write != pending.ticket {
+                inner = self.turn.wait(inner).unwrap();
+            }
+        }
+        let result = pending.encode();
+        {
+            let mut inner = self.inner.lock().unwrap();
+            inner.outstanding.remove(&pending.number);
+            inner.next_to_write += 1;
+            self.turn.notify_all();
+        }
+        if let Err(err) = result {
+            eprintln!("otkat was not written: {err}");
+        }
+    }
+}
+
 /// The length the ring aims to hold until the length knob exists: 10 minutes.
 const CHOSEN_LENGTH: Duration = Duration::from_secs(10 * 60);
 
@@ -178,6 +256,7 @@ pub struct Ring {
     waiting_for_screen: bool,
     screen: Option<Screen>,
     bind: Bind,
+    queue: Arc<OtkatQueue>,
 }
 
 impl Ring {
@@ -213,6 +292,7 @@ impl Ring {
             waiting_for_screen: false,
             screen: None,
             bind: Self::default_bind(),
+            queue: Arc::new(OtkatQueue::new()),
         }
     }
 
@@ -232,6 +312,7 @@ impl Ring {
             waiting_for_screen,
             screen: remembered,
             bind: Self::default_bind(),
+            queue: Arc::new(OtkatQueue::new()),
         }
     }
 
@@ -286,7 +367,9 @@ impl Ring {
     /// [`PlashkaEvent::NoAccess`]. When the ring holds no frame, answers with
     /// [`PlashkaEvent::NothingToSave`]. Neither of those creates a file.
     /// A ring that holds frames answers with [`PlashkaEvent::Saved`]; the file
-    /// is written when that value is dropped.
+    /// is written when that value is dropped. The answer does not wait for an
+    /// earlier file that is still being written. That otkat keeps the ring as
+    /// it is at this bind and waits in the queue.
     pub fn bind(&mut self, chord: Bind) -> Option<PlashkaEvent> {
         if chord != self.bind {
             return None;
@@ -299,13 +382,19 @@ impl Ring {
         }
         let day = (self.clock)();
         let duration = self.held.min(CHOSEN_LENGTH);
-        let number = next_otkat_number(&self.otkat_folder);
+        let (ticket, number) = self.queue.reserve(&self.otkat_folder);
         let name = format!("otkat{number}-{}.mp4", day.label());
         let path = self.otkat_folder.join(&name);
         Some(PlashkaEvent::Saved(SavedOtkat {
             name,
             duration,
-            pending: Some(PendingOtkat { path, duration }),
+            pending: Some(PendingOtkat {
+                path,
+                duration,
+                ticket,
+                number,
+                queue: Arc::clone(&self.queue),
+            }),
         }))
     }
 }
