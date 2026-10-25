@@ -20,6 +20,8 @@ Window {
     property string language: "en"
     // The bind the face hands to the ring. Alt+Z until the person changes it.
     property string bind: "Alt+Z"
+    // The switch the face hands to the ring. On until the person turns the ring off.
+    property bool ringOn: true
     // Reported by the shell. The program language does not follow either value.
     property string shellLanguage: ""
     property string serpantinumLanguage: ""
@@ -48,6 +50,10 @@ Window {
 
     function setBind(chord) {
         bind = chord
+    }
+
+    function setSwitch(gathering) {
+        ringOn = gathering
     }
 
     function setShellLanguage(next) {
