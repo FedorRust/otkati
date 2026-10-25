@@ -219,6 +219,15 @@ fn the_otkat_folder_is_created_when_the_file_is_written() {
 }
 
 #[test]
+fn the_default_otkat_folder_is_videos_otkaty() {
+    let home = std::env::var_os("HOME").expect("HOME");
+    assert_eq!(
+        Ring::default_otkat_folder(),
+        PathBuf::from(home).join("Videos").join("Откаты")
+    );
+}
+
+#[test]
 fn an_empty_ring_does_not_create_the_otkat_folder() {
     let parent = OtkatFolder::new();
     let path = parent.path.join("Откаты");

@@ -155,6 +155,16 @@ impl Ring {
         Bind { text: "Alt+Z" }
     }
 
+    /// `~/Videos/Откаты`, where otkats are saved until the folder knob changes.
+    pub fn default_otkat_folder() -> PathBuf {
+        let mut folder = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."));
+        folder.push("Videos");
+        folder.push("Откаты");
+        folder
+    }
+
     /// `otkat_folder` is where a saved otkat is written.
     pub fn new(otkat_folder: impl Into<PathBuf>) -> Self {
         Self::with_clock(otkat_folder, system_bind_day)
