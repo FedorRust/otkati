@@ -33,6 +33,8 @@ pub enum Card {
     /// An AMD card. `hevc` is whether this card can do HEVC.
     /// `rx_7000` is whether it is an RX 7000 or newer.
     Amd { hevc: bool, rx_7000: bool },
+    /// An Intel card. `hevc` is whether this card can do HEVC.
+    Intel { hevc: bool },
 }
 
 /// The key combination that asks the ring to save an otkat.
@@ -392,24 +394,27 @@ enum VendorPath {
     Amd,
 }
 
-fn vendor_path(card: Card) -> VendorPath {
+fn vendor_path(card: Card) -> Option<VendorPath> {
     match card {
-        Card::Nvidia3060Ti | Card::Nvidia3070Ti | Card::Nvidia40Series => VendorPath::Nvidia,
-        Card::Amd { .. } => VendorPath::Amd,
+        Card::Nvidia3060Ti | Card::Nvidia3070Ti | Card::Nvidia40Series => Some(VendorPath::Nvidia),
+        Card::Amd { .. } => Some(VendorPath::Amd),
+        Card::Intel { .. } => None,
     }
 }
 
 fn hevc_offered(card: Card) -> bool {
     match vendor_path(card) {
-        VendorPath::Nvidia => true,
-        VendorPath::Amd => matches!(card, Card::Amd { hevc: true, .. }),
+        Some(VendorPath::Nvidia) => true,
+        Some(VendorPath::Amd) => matches!(card, Card::Amd { hevc: true, .. }),
+        None => matches!(card, Card::Intel { hevc: true }),
     }
 }
 
 fn av1_offered(card: Card) -> bool {
     match vendor_path(card) {
-        VendorPath::Nvidia => matches!(card, Card::Nvidia40Series),
-        VendorPath::Amd => matches!(card, Card::Amd { rx_7000: true, .. }),
+        Some(VendorPath::Nvidia) => matches!(card, Card::Nvidia40Series),
+        Some(VendorPath::Amd) => matches!(card, Card::Amd { rx_7000: true, .. }),
+        None => false,
     }
 }
 

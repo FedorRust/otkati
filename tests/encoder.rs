@@ -214,3 +214,21 @@ fn an_rx_7000_that_cannot_do_hevc_still_offers_av1() {
     ring.take_encoder(Encoder::Av1);
     assert_eq!(ring.encoder(), Encoder::Av1);
 }
+
+#[test]
+fn an_intel_card_that_can_do_hevc_offers_it_and_not_av1() {
+    let folder = OtkatFolder::new();
+    let mut ring = Ring::new(folder.path.clone());
+    ring.see_card(Card::Intel { hevc: true });
+
+    assert_eq!(ring.encoder(), Encoder::H264);
+    assert_eq!(
+        ring.offered_encoders(),
+        vec![Encoder::H264, Encoder::Hevc]
+    );
+
+    ring.take_encoder(Encoder::Av1);
+    assert_eq!(ring.encoder(), Encoder::H264);
+    ring.take_encoder(Encoder::Hevc);
+    assert_eq!(ring.encoder(), Encoder::Hevc);
+}
