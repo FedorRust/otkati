@@ -121,3 +121,52 @@ fn two_remaining_monitors_are_not_chosen_by_position_focus_or_connector() {
     assert_eq!(segment.monitor(), &desk);
     assert_eq!(segment.duration(), Duration::from_secs(2));
 }
+
+#[test]
+fn a_disconnected_monitor_moves_the_ring_to_the_one_that_remains() {
+    let folder = OtkatFolder::new();
+    let desk = Screen::new("desk");
+    let laptop = Screen::new("laptop");
+    let mut ring = Ring::enter_session(folder.path.clone(), Some(desk.clone()));
+    ring.take_monitor(MonitorMoment::new(desk.clone(), Duration::from_secs(4)));
+
+    ring.see_connected_monitors(&[ConnectedMonitor::new(
+        laptop.clone(),
+        (0, 0),
+        true,
+        "DP-1",
+    )]);
+
+    assert_eq!(ring.monitor(), Some(&laptop));
+    let segment = ring.segment().expect("the ring does not go empty");
+    assert_eq!(segment.monitor(), &laptop);
+    assert_eq!(segment.duration(), Duration::from_secs(4));
+
+    ring.take_monitor(MonitorMoment::new(desk, Duration::from_secs(9)));
+    assert_eq!(
+        ring.segment().unwrap().duration(),
+        Duration::from_secs(4)
+    );
+
+    ring.take_monitor(MonitorMoment::new(laptop.clone(), Duration::from_secs(3)));
+    let segment = ring.segment().expect("the remaining monitor entered the ring");
+    assert_eq!(segment.monitor(), &laptop);
+    assert_eq!(segment.duration(), Duration::from_secs(7));
+
+    let event = ring.bind(Ring::default_bind());
+    let Some(PlashkaEvent::Saved(saved)) = &event else {
+        panic!("expected a saved otkat from the monitor that remains, got {event:?}");
+    };
+    assert_eq!(saved.monitor(), Some(&laptop));
+    assert_eq!(saved.duration(), Duration::from_secs(7));
+    let path = folder.path.join(saved.name());
+    assert!(
+        !path.exists(),
+        "the success plashka comes out before the file is in the folder"
+    );
+    drop(event);
+    assert!(
+        path.exists(),
+        "the otkat from the monitor that remains is written after the plashka"
+    );
+}

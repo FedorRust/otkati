@@ -807,13 +807,26 @@ impl Ring {
     /// Position, focus, and connector name do not choose the ring monitor.
     /// A monitor at `0x0`, the focused monitor, or a connector such as `DP-1`
     /// stays out unless the person chose it. When the person has not chosen,
-    /// none of these becomes the ring monitor.
+    /// none of these becomes the ring monitor. When the chosen monitor is
+    /// disconnected and one monitor remains, the ring moves to that one and
+    /// keeps the minutes it already held.
     pub fn see_connected_monitors(&mut self, monitors: &[ConnectedMonitor]) {
         for monitor in monitors {
             let _position = monitor.position;
             let _focused = monitor.focused;
             let _connector = monitor.connector.as_str();
-            let _screen = monitor.screen.name();
+        }
+        let Some(chosen) = self.screen.clone() else {
+            return;
+        };
+        if monitors
+            .iter()
+            .any(|monitor| monitor.screen.name() == chosen.name())
+        {
+            return;
+        }
+        if monitors.len() == 1 {
+            self.move_to(monitors[0].screen.clone());
         }
     }
 
