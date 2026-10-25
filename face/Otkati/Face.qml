@@ -11,7 +11,13 @@ Window {
         NothingToSave
     }
 
+    property color themeColor: "#000000"
     readonly property alias plashkaText: label.text
+    readonly property alias plashkaColor: background.color
+
+    function setTheme(color) {
+        themeColor = color
+    }
 
     function showPlashka(event) {
         if (event !== Face.PlashkaEvent.NothingToSave)
@@ -20,9 +26,16 @@ Window {
         visible = true
     }
 
+    Rectangle {
+        id: background
+        anchors.fill: parent
+        color: "#ff0000"
+    }
+
     Text {
         id: label
         anchors.centerIn: parent
+        color: "white"
         text: ""
     }
 }
