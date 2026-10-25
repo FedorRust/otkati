@@ -3,6 +3,21 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+/// How the ring compresses the picture. The person picks one item.
+///
+/// H.264 is chosen until the person switches. On a new machine it is chosen
+/// again. The ring says which of these items the card can do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Encoder {
+    /// H.264. For NVIDIA, AMD, Intel, and machines with no hardware encoder.
+    H264,
+    /// HEVC. For NVIDIA, including the 3060 Ti and 3070 Ti, and for AMD or
+    /// Intel when the card can do HEVC.
+    Hevc,
+    /// AV1. For NVIDIA from the 40 series and AMD from the RX 7000.
+    Av1,
+}
+
 /// The key combination that asks the ring to save an otkat.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bind {
@@ -256,6 +271,18 @@ impl Ring {
     /// The ring's monitor: the screen from the person's answer.
     pub fn monitor(&self) -> Option<&Screen> {
         self.screen.as_ref()
+    }
+
+    /// The encoder the ring is using. A new machine uses H.264.
+    pub fn encoder(&self) -> Encoder {
+        Encoder::H264
+    }
+
+    /// Encoder items this card can do, in knob order.
+    ///
+    /// Until the ring has seen a card, the only item is H.264.
+    pub fn offered_encoders(&self) -> Vec<Encoder> {
+        vec![Encoder::H264]
     }
 
     /// Output sound arrived. It does not ask which screen to give.
