@@ -198,6 +198,44 @@ impl Screen {
     }
 }
 
+/// A monitor that is connected.
+///
+/// `position` is where it sits, `focused` is whether it has focus, and
+/// `connector` is its connector name. The ring is told all three and does not
+/// choose a ring monitor from them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectedMonitor {
+    screen: Screen,
+    position: (i32, i32),
+    focused: bool,
+    connector: String,
+}
+
+impl ConnectedMonitor {
+    /// One connected monitor, as the capture boundary reports it.
+    ///
+    /// This is not a Wayland output. `position`, `focused`, and `connector`
+    /// do not decide the ring monitor.
+    pub fn new(
+        screen: Screen,
+        position: (i32, i32),
+        focused: bool,
+        connector: impl Into<String>,
+    ) -> Self {
+        Self {
+            screen,
+            position,
+            focused,
+            connector: connector.into(),
+        }
+    }
+
+    /// The screen this connected monitor is.
+    pub fn screen(&self) -> &Screen {
+        &self.screen
+    }
+}
+
 /// A moment of one monitor handed to the ring.
 ///
 /// This is the capture boundary's report of that monitor. It is not a
@@ -773,9 +811,65 @@ impl Ring {
     /// and does not become the ring's monitor.
     pub fn offer_screen(&mut self, _screen: Screen) {}
 
-    /// The ring's monitor: the screen from the person's answer.
+    /// The ring's monitor: the screen the person chose.
+    ///
+    /// The first choice is the screen answer. A later choice in settings
+    /// replaces it. The program does not fill this from position, focus, or
+    /// a connector name.
     pub fn monitor(&self) -> Option<&Screen> {
         self.screen.as_ref()
+    }
+
+    /// Which monitors are connected.
+    ///
+    /// Position, focus, and connector name do not choose the ring monitor.
+    /// A monitor at `0x0`, the focused monitor, or a connector such as `DP-1`
+    /// stays out unless the person chose it. When the person has not chosen,
+    /// none of these becomes the ring monitor. When the chosen monitor is
+    /// disconnected and one monitor remains, the ring moves to that one and
+    /// keeps the minutes it already held.
+    pub fn see_connected_monitors(&mut self, monitors: &[ConnectedMonitor]) {
+        for monitor in monitors {
+            let _position = monitor.position;
+            let _focused = monitor.focused;
+            let _connector = monitor.connector.as_str();
+        }
+        let Some(chosen) = self.screen.clone() else {
+            return;
+        };
+        if monitors
+            .iter()
+            .any(|monitor| monitor.screen.name() == chosen.name())
+        {
+            return;
+        }
+        if monitors.len() == 1 {
+            self.move_to(monitors[0].screen.clone());
+        }
+    }
+
+    /// The face hands the ring the monitor the person chose in settings.
+    ///
+    /// The ring moves to that screen. Minutes already held stay with it, and
+    /// a moment of another monitor stays out. Nothing is written to the otkat
+    /// folder.
+    pub fn take_ring_monitor(&mut self, screen: Screen) {
+        self.move_to(screen);
+    }
+
+    fn move_to(&mut self, screen: Screen) {
+        if self
+            .screen
+            .as_ref()
+            .is_some_and(|current| current.name() == screen.name())
+        {
+            return;
+        }
+        self.waiting_for_screen = false;
+        self.screen = Some(screen.clone());
+        if let Some(segment) = self.segment.as_mut() {
+            segment.monitor = screen;
+        }
     }
 
     /// The encoder the ring is using. A new machine uses H.264.
