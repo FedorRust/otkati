@@ -10,6 +10,7 @@ Window {
 
     enum PlashkaEvent {
         NothingToSave,
+        Saved,
         ClipNotSaved,
         NoAccess
     }
@@ -137,7 +138,7 @@ Window {
     }
 
     function showPlashka(event) {
-        if (event === Face.PlashkaEvent.NoAccess) {
+        if (event === Face.PlashkaEvent.Saved || event === Face.PlashkaEvent.NoAccess) {
             plashka.event = event
             plashka.alarm = false
             label.text = ""
