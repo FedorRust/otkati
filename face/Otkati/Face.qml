@@ -14,7 +14,10 @@ Window {
         NothingToSave,
         NoSpace,
         ClipDidNotSave,
-        Ordinary
+        Ordinary,
+        Saved,
+        ClipNotSaved,
+        NoAccess
     }
 
     readonly property var colorKeys: [
@@ -45,9 +48,20 @@ Window {
     readonly property color settingsColor: settingsSurface ? settingsSurface.color : "transparent"
     readonly property color settingsTextColor: settingsSurface ? settingsSurface.ink : "transparent"
     readonly property bool settingsVisible: settingsSurface ? settingsSurface.visible : false
-    property int shownPlashka: -1
+    // The bind the face hands to the ring. Alt+Z until the person changes it.
+    property string bind: "Alt+Z"
+    // Reported by the shell. The program language does not follow either value.
+    property string shellLanguage: ""
+    property string serpantinumLanguage: ""
     readonly property alias plashkaText: label.text
     readonly property alias plashkaColor: background.color
+    readonly property int plashkaEvent: plashka.event
+
+    QtObject {
+        id: plashka
+        property int event: -1
+        property bool alarm: false
+    }
 
     function setTheme(next) {
         if (typeof next === "string" && next.charAt(0) === "#") {
@@ -135,6 +149,7 @@ Window {
             settingsSurface = settingsWindowComponent.createObject(null)
         themeName = name
         themeColors = colors
+        themeColor = colors.base
         settingsSurface.color = colors.base
         settingsSurface.ink = colors.text
         settingsSurface.visible = true
@@ -199,42 +214,124 @@ Window {
 
     function setLanguage(next) {
         language = next
-        if (visible)
-            label.text = plashkaTextFor(shownPlashka)
+        if (!visible)
+            return
+        const text = plashkaPhrase(plashka.event)
+        if (text !== "")
+            label.text = text
     }
 
-    function nothingToSaveText() {
-        if (language === "ru")
-            return "Сохранять нечего"
-        return "Nothing to save"
+    function setBind(chord) {
+        bind = chord
     }
 
-    function clipDidNotSaveText() {
-        if (language === "ru")
-            return "Откат не сохранился"
-        return "Couldn't save the clip"
+    function setShellLanguage(next) {
+        shellLanguage = next
     }
 
-    function plashkaTextFor(event) {
+    function setSerpantinumLanguage(next) {
+        serpantinumLanguage = next
+    }
+
+    function plashkaPhrase(event) {
         if (event === Face.PlashkaEvent.NothingToSave)
-            return nothingToSaveText()
-        if (event === Face.PlashkaEvent.ClipDidNotSave)
-            return clipDidNotSaveText()
+            return language === "ru" ? "Сохранять нечего" : "Nothing to save"
+        if (event === Face.PlashkaEvent.ClipNotSaved || event === Face.PlashkaEvent.ClipDidNotSave)
+            return language === "ru" ? "Откат не сохранился" : "Couldn't save the clip"
         return ""
     }
 
-    function showPlashka(event) {
-        const alarm = event === Face.PlashkaEvent.NothingToSave
+    function settingLabel(key) {
+        if (key === "length")
+            return lengthLabel.text
+        if (key === "resolutionShare")
+            return resolutionShareLabel.text
+        if (key === "bitrate")
+            return bitrateLabel.text
+        if (key === "encoder")
+            return encoderLabel.text
+        if (key === "ringPlace")
+            return ringPlaceLabel.text
+        if (key === "ringMonitor")
+            return ringMonitorLabel.text
+        if (key === "bind")
+            return bindLabel.text
+        if (key === "language")
+            return languageLabel.text
+        if (key === "theme")
+            return themeLabel.text
+        if (key === "otkatFolder")
+            return otkatFolderLabel.text
+        if (key === "switch")
+            return switchLabel.text
+        return ""
+    }
+
+    function languageChoice(choice) {
+        if (choice === "en")
+            return englishChoice.text
+        if (choice === "ru")
+            return russianChoice.text
+        return ""
+    }
+
+    function chooseLanguage(choice) {
+        if (choice === "en" || choice === "ru")
+            setLanguage(choice)
+    }
+
+    Item {
+        id: settings
+        visible: false
+
+        Text { id: lengthLabel; text: root.language === "ru" ? "Длина" : "Length" }
+        Text { id: resolutionShareLabel; text: root.language === "ru" ? "Доля разрешения" : "Resolution share" }
+        Text { id: bitrateLabel; text: root.language === "ru" ? "Битрейт" : "Bitrate" }
+        Text { id: encoderLabel; text: root.language === "ru" ? "Кодировщик" : "Encoder" }
+        Text { id: ringPlaceLabel; text: root.language === "ru" ? "Место кольца" : "Ring place" }
+        Text { id: ringMonitorLabel; text: root.language === "ru" ? "Монитор кольца" : "Ring monitor" }
+        Text { id: bindLabel; text: root.language === "ru" ? "Бинд" : "Bind" }
+        Text { id: languageLabel; text: root.language === "ru" ? "Язык" : "Language" }
+        Text { id: themeLabel; text: root.language === "ru" ? "Тема" : "Theme" }
+        Text { id: otkatFolderLabel; text: root.language === "ru" ? "Папка откатов" : "Otkat folder" }
+        Text { id: switchLabel; text: root.language === "ru" ? "Выключатель" : "Switch" }
+        Text {
+            id: englishChoice
+            text: root.language === "ru" ? "Английский" : "English"
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.chooseLanguage("en")
+            }
+        }
+        Text {
+            id: russianChoice
+            text: root.language === "ru" ? "Русский" : "Russian"
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.chooseLanguage("ru")
+            }
+        }
+    }
+
+    function alarmEvent(event) {
+        return event === Face.PlashkaEvent.NothingToSave
                 || event === Face.PlashkaEvent.NoSpace
                 || event === Face.PlashkaEvent.ClipDidNotSave
-        if (!alarm && event !== Face.PlashkaEvent.Ordinary)
+                || event === Face.PlashkaEvent.ClipNotSaved
+    }
+
+    function ordinaryEvent(event) {
+        return event === Face.PlashkaEvent.Ordinary
+                || event === Face.PlashkaEvent.Saved
+                || event === Face.PlashkaEvent.NoAccess
+    }
+
+    function showPlashka(event) {
+        if (!alarmEvent(event) && !ordinaryEvent(event))
             return
-        shownPlashka = event
-        label.text = plashkaTextFor(event)
-        if (alarm)
-            background.color = "#ff0000"
-        else if (themeColors.base)
-            background.color = themeColors.base
+        plashka.event = event
+        plashka.alarm = alarmEvent(event)
+        label.text = plashkaPhrase(event)
         visible = true
         hideTimer.restart()
     }
@@ -263,7 +360,7 @@ Window {
     Rectangle {
         id: background
         anchors.fill: parent
-        color: "#ff0000"
+        color: plashka.alarm ? "#ff0000" : root.themeColor
     }
 
     Text {
