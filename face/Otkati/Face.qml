@@ -86,6 +86,7 @@ Window {
             h264: "NVIDIA, AMD, Intel, and machines with no hardware encoder",
             hevc: "NVIDIA, including the 3060 Ti and 3070 Ti, and AMD or Intel when the card can do HEVC",
             av1: "NVIDIA from the 40 series and AMD from the RX 7000",
+            chooseH264: "Choose H.264",
             ringPlace: "Ring place",
             ringMonitor: "Ring monitor",
             bind: "Bind",
@@ -93,6 +94,30 @@ Window {
             theme: "Theme",
             otkatFolder: "Otkat folder",
             switch: "Switch",
+            settingsTitle: "Settings",
+            search: "Search",
+            navRing: "Ring",
+            navPicture: "Picture",
+            navMonitor: "Monitor",
+            navLook: "Look",
+            navFolder: "Folder",
+            switchHint: "While the ring is off, a bind does not save an otkat.",
+            lengthHint: "How many of the last seconds the ring keeps.",
+            memory: "Memory",
+            disk: "Disk",
+            memoryHint: "The ring stays in memory.",
+            diskHint: "The ring stays in the ring folder on disk.",
+            resolutionHint: "Share of each side of the ring monitor.",
+            bitrateHint: "Picture bitrate. It does not follow the share.",
+            monitorHint: "This monitor's picture goes into the ring, and the plashka comes out on it.",
+            languageHint: "The language the program speaks.",
+            themeHint: "A ready Serpantinum theme.",
+            folderHint: "Where each bind puts a new otkat.",
+            bindHint: "The chord that saves an otkat.",
+            min: "min",
+            sec: "s",
+            mbit: "Mbit/s",
+            nothingFound: "Nothing found",
             english: "English",
             russian: "Russian",
             nothingToSave: "Nothing to save",
@@ -111,6 +136,7 @@ Window {
             h264: "NVIDIA, AMD, Intel и компьютеры без аппаратного кодировщика",
             hevc: "NVIDIA, включая 3060 Ti и 3070 Ti, и AMD или Intel, если карта умеет HEVC",
             av1: "NVIDIA с 40-й серии и AMD с RX 7000",
+            chooseH264: "Выбирайте H.264",
             ringPlace: "Место кольца",
             ringMonitor: "Монитор кольца",
             bind: "Бинд",
@@ -118,6 +144,30 @@ Window {
             theme: "Тема",
             otkatFolder: "Папка откатов",
             switch: "Выключатель",
+            settingsTitle: "Настройки",
+            search: "Поиск",
+            navRing: "Кольцо",
+            navPicture: "Качество",
+            navMonitor: "Монитор",
+            navLook: "Вид",
+            navFolder: "Папка",
+            switchHint: "Пока кольцо выключено, бинд не сохраняет откат.",
+            lengthHint: "Сколько последних секунд кольцо держит.",
+            memory: "Память",
+            disk: "Диск",
+            memoryHint: "Кольцо лежит в памяти.",
+            diskHint: "Кольцо лежит в папке кольца на диске.",
+            resolutionHint: "Доля каждой стороны монитора кольца.",
+            bitrateHint: "Битрейт картинки. От доли сам не меняется.",
+            monitorHint: "Картинка этого монитора попадает в кольцо, и на нём выезжает плашка.",
+            languageHint: "Язык, на котором программа говорит.",
+            themeHint: "Готовая тема Serpantinum.",
+            folderHint: "Куда каждый бинд кладёт новый откат.",
+            bindHint: "Сочетание, по которому сохраняется откат.",
+            min: "мин",
+            sec: "с",
+            mbit: "Мбит/с",
+            nothingFound: "Ничего не нашлось",
             english: "Английский",
             russian: "Русский",
             nothingToSave: "Сохранять нечего",
@@ -610,11 +660,7 @@ Window {
     }
 
     function encoderSelectable(item) {
-        for (let i = 0; i < offeredEncoders.length; ++i) {
-            if (offeredEncoders[i] === item)
-                return true
-        }
-        return false
+        return item === "H.264" || item === "HEVC" || item === "AV1"
     }
 
     function chooseEncoder(item) {
@@ -813,154 +859,20 @@ Window {
             title: "otkati-settings"
             flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
             visible: open && !covered
-            width: 520
-            height: 560
-            minimumWidth: 520
-            maximumWidth: 520
-            minimumHeight: 560
-            maximumHeight: 560
+            width: 1080
+            height: 700
+            minimumWidth: 1080
+            maximumWidth: 1080
+            minimumHeight: 700
+            maximumHeight: 700
             x: 80
             y: 80
 
-            Column {
+            Desk {
                 anchors.fill: parent
-                anchors.margins: 28
-                spacing: 22
                 visible: !settingsWindow.covered && settingsWindow.host
-
-                Text {
-                    text: settingsWindow.host.words.length
-                    color: settingsWindow.ink
-                    font.pixelSize: 13
-                }
-                Row {
-                    spacing: 16
-                    Text {
-                        text: settingsWindow.host.length
-                        color: settingsWindow.ink
-                        font.pixelSize: 28
-                        font.bold: true
-                    }
-                    Rectangle {
-                        width: 36
-                        height: 36
-                        radius: 8
-                        color: Qt.rgba(1, 1, 1, 0.08)
-                        Text { anchors.centerIn: parent; text: "−"; color: settingsWindow.ink; font.pixelSize: 20 }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: settingsWindow.host.setLength(settingsWindow.host.length - 1)
-                        }
-                    }
-                    Rectangle {
-                        width: 36
-                        height: 36
-                        radius: 8
-                        color: Qt.rgba(1, 1, 1, 0.08)
-                        Text { anchors.centerIn: parent; text: "+"; color: settingsWindow.ink; font.pixelSize: 20 }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: settingsWindow.host.setLength(settingsWindow.host.length + 1)
-                        }
-                    }
-                }
-
-                Text {
-                    text: settingsWindow.host.words.resolutionShare
-                    color: settingsWindow.ink
-                    font.pixelSize: 13
-                }
-                Row {
-                    spacing: 16
-                    Text {
-                        text: settingsWindow.host.resolutionShare
-                        color: settingsWindow.ink
-                        font.pixelSize: 28
-                        font.bold: true
-                    }
-                    Rectangle {
-                        width: 36
-                        height: 36
-                        radius: 8
-                        color: Qt.rgba(1, 1, 1, 0.08)
-                        Text { anchors.centerIn: parent; text: "−"; color: settingsWindow.ink; font.pixelSize: 20 }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: settingsWindow.host.setResolutionShare(settingsWindow.host.resolutionShare - 10)
-                        }
-                    }
-                    Rectangle {
-                        width: 36
-                        height: 36
-                        radius: 8
-                        color: Qt.rgba(1, 1, 1, 0.08)
-                        Text { anchors.centerIn: parent; text: "+"; color: settingsWindow.ink; font.pixelSize: 20 }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: settingsWindow.host.setResolutionShare(settingsWindow.host.resolutionShare + 10)
-                        }
-                    }
-                }
-
-                Text {
-                    text: settingsWindow.host.words.bitrate
-                    color: settingsWindow.ink
-                    font.pixelSize: 13
-                }
-                Row {
-                    spacing: 16
-                    Text {
-                        text: settingsWindow.host.bitrate
-                        color: settingsWindow.ink
-                        font.pixelSize: 28
-                        font.bold: true
-                    }
-                    Rectangle {
-                        width: 36
-                        height: 36
-                        radius: 8
-                        color: Qt.rgba(1, 1, 1, 0.08)
-                        Text { anchors.centerIn: parent; text: "−"; color: settingsWindow.ink; font.pixelSize: 20 }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: settingsWindow.host.setBitrate(settingsWindow.host.bitrate - 1)
-                        }
-                    }
-                    Rectangle {
-                        width: 36
-                        height: 36
-                        radius: 8
-                        color: Qt.rgba(1, 1, 1, 0.08)
-                        Text { anchors.centerIn: parent; text: "+"; color: settingsWindow.ink; font.pixelSize: 20 }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: settingsWindow.host.setBitrate(settingsWindow.host.bitrate + 1)
-                        }
-                    }
-                }
-
-                Text {
-                    text: settingsWindow.host.words.bind + "  " + settingsWindow.host.bind
-                    color: settingsWindow.ink
-                    font.pixelSize: 18
-                }
-                Row {
-                    spacing: 18
-                    Text {
-                        text: settingsWindow.host.words.english
-                        color: settingsWindow.ink
-                        font.pixelSize: 16
-                        font.bold: settingsWindow.host.language === "en"
-                        MouseArea { anchors.fill: parent; onClicked: settingsWindow.host.chooseLanguage("en") }
-                    }
-                    Text {
-                        text: settingsWindow.host.words.russian
-                        color: settingsWindow.ink
-                        font.pixelSize: 16
-                        font.bold: settingsWindow.host.language === "ru"
-                        MouseArea { anchors.fill: parent; onClicked: settingsWindow.host.chooseLanguage("ru") }
-                    }
-                }
+                host: settingsWindow.host
+                ink: settingsWindow.ink
             }
         }
     }
