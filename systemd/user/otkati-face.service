@@ -1,0 +1,14 @@
+[Unit]
+Description=Otkati face
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/fedor/Projects))/otkati for alexey
+ExecStart=/usr/lib/qt6/bin/qml -I face face/Session.qml
+Environment=QT_QPA_PLATFORM=wayland
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

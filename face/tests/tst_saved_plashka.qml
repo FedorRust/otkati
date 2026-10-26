@@ -46,12 +46,14 @@ TestCase {
         compare(face.visible, true)
         compare(face.plashkaEvent, Face.PlashkaEvent.Saved)
         compare(face.plashkaColor, "#010101")
-        compare(face.plashkaText, "")
+        compare(face.plashkaText, "Saved")
 
         face.showPlashka(Face.PlashkaEvent.Saved)
         compare(face.visible, true)
         compare(face.plashkaEvent, Face.PlashkaEvent.Saved)
         compare(face.plashkaColor, "#010101")
-        compare(face.plashkaText, "")
+        compare(face.plashkaText, "Saved")
+        face.setLanguage("ru")
+        compare(face.plashkaText, "Откат сохранён")
     }
 }

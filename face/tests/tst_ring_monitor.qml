@@ -60,10 +60,18 @@ TestCase {
         compare(face.y, 0)
 
         face.setRingMonitor("side")
-        compare(face.x, 2000)
-        compare(face.y, 90)
+        compare(face.x, 2000 + 1280 - face.width - face.plashkaMargin)
+        compare(face.y, 90 + face.plashkaTop)
         face.setRingMonitor("origin")
-        compare(face.x, 400)
-        compare(face.y, 300)
+        compare(face.x, 400 + 1920 - face.width - face.plashkaMargin)
+        compare(face.y, 300 + face.plashkaTop)
+    }
+
+    function test_the_plashka_slides_in_from_the_right() {
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.showPlashka(Face.PlashkaEvent.NothingToSave)
+        compare(face.slide, 0)
+        tryCompare(face, "slide", 1, 800)
     }
 }

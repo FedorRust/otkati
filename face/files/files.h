@@ -14,6 +14,8 @@ public:
     Q_INVOKABLE QString readText(const QString &path) const;
     Q_INVOKABLE bool writeText(const QString &path, const QString &text) const;
     Q_INVOKABLE QStringList jsonFiles(const QString &directory) const;
+    // One line to the ring, one line back. Empty when the ring is not listening.
+    Q_INVOKABLE QString ask(const QString &line) const;
 };
 
 class FilesPlugin : public QQmlExtensionPlugin {

@@ -6,6 +6,10 @@ PartOf=graphical-session.target
 [Service]
 Type=simple
 ExecStart=otkati-ring
+Environment=OTKATI_SERVE=1
+Environment=OTKATI_SOCKET=%t/otkati/ring.sock
+Environment=OTKATI_ASK_SCREEN=1
+Environment=OTKATI_CAPTURE=1
 
 [Install]
 WantedBy=graphical-session.target

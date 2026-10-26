@@ -5,10 +5,16 @@ import Otkati.Files 1.0
 
 Window {
     id: root
-    width: 360
-    height: 80
+    width: 480
+    height: 88
+    minimumWidth: 480
+    maximumWidth: 480
+    minimumHeight: 88
+    maximumHeight: 88
+    color: "transparent"
+    title: "otkati-note"
     visible: false
-    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
+    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput
 
     enum PlashkaEvent {
         NothingToSave,
@@ -53,6 +59,11 @@ Window {
     property var settingsSurface: null
     property var firstLaunchOverlay: null
     property bool firstLaunchPlayed: false
+    // Live session only. Tests leave both off, so they never touch Hyprland or the shell shaders.
+    property bool grabBind: false
+    property bool shellSplash: false
+    property string bindMarkPath: "/tmp/otkati-bind"
+    readonly property string shellAssets: homePath + "/.local/share/serpantinum/src/assets"
     // Connected monitors. The overlay covers only the ring monitor.
     property var monitors: []
     readonly property bool firstLaunchVisible: firstLaunchOverlay !== null && firstLaunchOverlay.visible
@@ -86,6 +97,7 @@ Window {
             russian: "Russian",
             nothingToSave: "Nothing to save",
             clipDidNotSave: "Couldn't save the clip",
+            saved: "Saved",
             continueButton: "Continue",
             welcome: "Welcome",
             kept: "The last minutes are already kept.",
@@ -110,6 +122,7 @@ Window {
             russian: "Русский",
             nothingToSave: "Сохранять нечего",
             clipDidNotSave: "Откат не сохранился",
+            saved: "Откат сохранён",
             continueButton: "Дальше",
             welcome: "Добро пожаловать",
             kept: "Последние минуты уже пишутся.",
@@ -136,7 +149,7 @@ Window {
     readonly property real penguinHeight: firstLaunchOverlay ? firstLaunchOverlay.penguinHeight : 0
     readonly property color settingsColor: settingsSurface ? settingsSurface.color : "transparent"
     readonly property color settingsTextColor: settingsSurface ? settingsSurface.ink : "transparent"
-    readonly property bool settingsVisible: settingsSurface ? settingsSurface.visible : false
+    readonly property bool settingsVisible: settingsSurface ? settingsSurface.open : false
     // The otkat folder the face hands to the ring. ~/Videos/Откаты until the person changes it.
     property string otkatFolder: homePath + "/Videos/Откаты"
     // The bind the face hands to the ring. Alt+Z until the person changes it.
@@ -197,6 +210,12 @@ Window {
     readonly property alias plashkaText: label.text
     readonly property alias plashkaColor: background.color
     readonly property int plashkaEvent: plashka.event
+    // Gap between the card and the right edge of the ring monitor.
+    readonly property int plashkaMargin: 24
+    // Below the shell bar. That bar sits at y 4 and is 40 tall, so 52 clears it.
+    readonly property int plashkaTop: 52
+    // 0 is off the right edge, 1 is in the corner. The card slides; the window does not.
+    property real slide: 0
     // The plashka is shown on the current ring monitor.
     readonly property string plashkaMonitor: ringMonitor
 
@@ -286,14 +305,36 @@ Window {
     }
 
     function applyTheme(name, colors) {
+        const cover = !firstLaunchPlayed && ringMonitorGeometry() !== null
         if (!settingsSurface)
-            settingsSurface = settingsWindowComponent.createObject(null)
+            settingsSurface = settingsWindowComponent.createObject(null, { host: root, covered: cover })
         themeName = name
         themeColors = colors
         themeColor = colors.base
         settingsSurface.color = colors.base
         settingsSurface.ink = colors.text
-        settingsSurface.visible = true
+        settingsSurface.covered = cover
+        if (!cover)
+            placeSettings(settingsSurface)
+        settingsSurface.open = true
+    }
+
+    function leftmostScreen() {
+        const screens = Qt.application.screens
+        let screen = screens.length ? screens[0] : null
+        for (let i = 0; i < screens.length; i++) {
+            if (screen && (screens[i].virtualX < screen.virtualX || (screens[i].virtualX === screen.virtualX && screens[i].virtualY < screen.virtualY)))
+                screen = screens[i]
+        }
+        return screen
+    }
+
+    function placeSettings(surface) {
+        const screen = leftmostScreen()
+        if (screen)
+            surface.screen = screen
+        surface.x = screen ? screen.virtualX + 80 : 80
+        surface.y = screen ? screen.virtualY + 80 : 80
     }
 
     function ringMonitorGeometry() {
@@ -320,18 +361,34 @@ Window {
     }
 
     function placeOnRingMonitor() {
-        if (!ringMonitor)
+        const margin = plashkaMargin
+        if (!ringMonitor) {
+            if (!grabBind)
+                return
+            const place = leftmostScreen()
+            if (!place)
+                return
+            screen = place
+            x = place.virtualX + place.width - width - margin
+            y = place.virtualY + plashkaTop
             return
+        }
         for (let i = 0; i < monitors.length; i++) {
             const monitor = monitors[i]
             if (monitor.name !== ringMonitor)
                 continue
-            if (monitor.x === undefined || monitor.y === undefined)
+            if (monitor.x === undefined || monitor.y === undefined || monitor.width === undefined)
                 return
-            x = monitor.x
-            y = monitor.y
+            x = monitor.x + monitor.width - width - margin
+            y = monitor.y + plashkaTop
             return
         }
+        const named = screenNamed(ringMonitor)
+        if (!named)
+            return
+        screen = named
+        x = named.virtualX + named.width - width - margin
+        y = named.virtualY + plashkaTop
     }
 
     function screenNamed(name) {
@@ -365,10 +422,18 @@ Window {
             lineColor: Qt.binding(function() { return root.themeColors.text }),
             outlineColor: Qt.binding(function() { return root.themeColors.text }),
             fillColor: Qt.binding(function() { return root.themeColors.blue }),
-            buttonText: Qt.binding(function() { return root.words.continueButton })
+            buttonText: Qt.binding(function() { return root.words.continueButton }),
+            assetsDir: root.shellSplash ? root.shellAssets : "",
+            crustColor: Qt.binding(function() { return root.themeColors.crust || root.themeColors.base }),
+            surfaceColor: Qt.binding(function() { return root.themeColors.surface1 || root.themeColors.base }),
+            orbColor: Qt.binding(function() { return root.themeColors.mauve || root.themeColors.blue }),
+            mutedColor: Qt.binding(function() { return root.themeColors.subtext0 || root.themeColors.text })
         })
-        if (!overlay)
+        if (!overlay) {
+            if (settingsSurface)
+                settingsSurface.covered = false
             return
+        }
         const screen = screenNamed(monitor.name)
         if (screen) {
             overlay.screen = screen
@@ -399,6 +464,10 @@ Window {
     function dismissFirstLaunch() {
         if (firstLaunchOverlay)
             firstLaunchOverlay.visible = false
+        if (!settingsSurface)
+            return
+        placeSettings(settingsSurface)
+        settingsSurface.covered = false
     }
 
     function storedTheme() {
@@ -460,6 +529,8 @@ Window {
                 || theme.current === "matugen"
                 || theme.activePreset === "Matugen"
     }
+
+    Component.onCompleted: Qt.quitOnLastWindowClosed = false
 
     Component.onDestruction: {
         if (settingsSurface)
@@ -529,6 +600,8 @@ Window {
             return words.nothingToSave
         if (event === Face.PlashkaEvent.ClipDidNotSave)
             return words.clipDidNotSave
+        if (event === Face.PlashkaEvent.Saved)
+            return words.saved
         return ""
     }
 
@@ -625,34 +698,269 @@ Window {
                 || event === Face.PlashkaEvent.RingOff
     }
 
+    function eventFromRing(reply) {
+        if (reply === "nothing")
+            return Face.PlashkaEvent.NothingToSave
+        if (reply === "no-access")
+            return Face.PlashkaEvent.NoAccess
+        if (reply === "folder")
+            return Face.PlashkaEvent.FolderNotCreated
+        if (reply === "no-space")
+            return Face.PlashkaEvent.NoSpace
+        if (reply === "clip-did-not-save")
+            return Face.PlashkaEvent.ClipDidNotSave
+        if (reply === "ring-off")
+            return Face.PlashkaEvent.RingOff
+        if (reply.indexOf("saved\t") === 0)
+            return Face.PlashkaEvent.Saved
+        return -1
+    }
+
+    function pullRingMonitor() {
+        const reply = Files.ask("query")
+        if (!reply)
+            return
+        const name = reply.split("\t")[1]
+        if (name && name !== "-" && name !== ringMonitor)
+            setRingMonitor(name)
+    }
+
+    function raiseBindPlashka() {
+        const reply = Files.ask("bind\t" + bind)
+        const event = eventFromRing(reply)
+        if (event < 0)
+            return
+        showPlashka(event)
+        if (event !== Face.PlashkaEvent.Saved)
+            return
+        const committed = Files.ask("commit")
+        if (committed === "clip-did-not-save")
+            showPlashka(Face.PlashkaEvent.ClipDidNotSave)
+    }
+
+    Timer {
+        interval: 120
+        repeat: true
+        running: root.grabBind
+        onTriggered: {
+            root.pullRingMonitor()
+            const mark = Files.readText(root.bindMarkPath)
+            if (!mark || mark.trim().length === 0)
+                return
+            Files.writeText(root.bindMarkPath, "")
+            root.raiseBindPlashka()
+        }
+    }
+
+    Shortcut {
+        sequence: "Alt+Z"
+        context: Qt.ApplicationShortcut
+        enabled: root.grabBind
+        onActivated: root.raiseBindPlashka()
+    }
+
     function showPlashka(event) {
         if (!alarmEvent(event) && !ordinaryEvent(event))
             return
         plashka.event = event
         plashka.alarm = alarmEvent(event)
         label.text = plashkaPhrase(event)
-        visible = true
+        slideIn.stop()
+        slideOut.stop()
+        slide = 0
         placeOnRingMonitor()
+        visible = true
+        slideIn.start()
         hideTimer.restart()
+    }
+
+    NumberAnimation {
+        id: slideIn
+        target: root
+        property: "slide"
+        to: 1
+        duration: 320
+        easing.type: Easing.OutCubic
+    }
+
+    NumberAnimation {
+        id: slideOut
+        target: root
+        property: "slide"
+        to: 0
+        duration: 220
+        easing.type: Easing.InCubic
+        onFinished: {
+            if (root.slide < 0.01)
+                root.visible = false
+        }
     }
 
     Timer {
         id: hideTimer
         interval: 2000
-        onTriggered: root.visible = false
+        onTriggered: slideOut.start()
     }
 
     Component {
         id: settingsWindowComponent
         Window {
+            id: settingsWindow
+            property var host: null
             property color ink: "transparent"
-            width: 360
-            height: 240
-            color: "transparent"
+            property bool open: false
+            property bool covered: false
+            title: "otkati-settings"
+            flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+            visible: open && !covered
+            width: 520
+            height: 560
+            minimumWidth: 520
+            maximumWidth: 520
+            minimumHeight: 560
+            maximumHeight: 560
+            x: 80
+            y: 80
 
-            Text {
-                anchors.centerIn: parent
-                color: ink
+            Column {
+                anchors.fill: parent
+                anchors.margins: 28
+                spacing: 22
+                visible: !settingsWindow.covered && settingsWindow.host
+
+                Text {
+                    text: settingsWindow.host.words.length
+                    color: settingsWindow.ink
+                    font.pixelSize: 13
+                }
+                Row {
+                    spacing: 16
+                    Text {
+                        text: settingsWindow.host.length
+                        color: settingsWindow.ink
+                        font.pixelSize: 28
+                        font.bold: true
+                    }
+                    Rectangle {
+                        width: 36
+                        height: 36
+                        radius: 8
+                        color: Qt.rgba(1, 1, 1, 0.08)
+                        Text { anchors.centerIn: parent; text: "−"; color: settingsWindow.ink; font.pixelSize: 20 }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: settingsWindow.host.setLength(settingsWindow.host.length - 1)
+                        }
+                    }
+                    Rectangle {
+                        width: 36
+                        height: 36
+                        radius: 8
+                        color: Qt.rgba(1, 1, 1, 0.08)
+                        Text { anchors.centerIn: parent; text: "+"; color: settingsWindow.ink; font.pixelSize: 20 }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: settingsWindow.host.setLength(settingsWindow.host.length + 1)
+                        }
+                    }
+                }
+
+                Text {
+                    text: settingsWindow.host.words.resolutionShare
+                    color: settingsWindow.ink
+                    font.pixelSize: 13
+                }
+                Row {
+                    spacing: 16
+                    Text {
+                        text: settingsWindow.host.resolutionShare
+                        color: settingsWindow.ink
+                        font.pixelSize: 28
+                        font.bold: true
+                    }
+                    Rectangle {
+                        width: 36
+                        height: 36
+                        radius: 8
+                        color: Qt.rgba(1, 1, 1, 0.08)
+                        Text { anchors.centerIn: parent; text: "−"; color: settingsWindow.ink; font.pixelSize: 20 }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: settingsWindow.host.setResolutionShare(settingsWindow.host.resolutionShare - 10)
+                        }
+                    }
+                    Rectangle {
+                        width: 36
+                        height: 36
+                        radius: 8
+                        color: Qt.rgba(1, 1, 1, 0.08)
+                        Text { anchors.centerIn: parent; text: "+"; color: settingsWindow.ink; font.pixelSize: 20 }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: settingsWindow.host.setResolutionShare(settingsWindow.host.resolutionShare + 10)
+                        }
+                    }
+                }
+
+                Text {
+                    text: settingsWindow.host.words.bitrate
+                    color: settingsWindow.ink
+                    font.pixelSize: 13
+                }
+                Row {
+                    spacing: 16
+                    Text {
+                        text: settingsWindow.host.bitrate
+                        color: settingsWindow.ink
+                        font.pixelSize: 28
+                        font.bold: true
+                    }
+                    Rectangle {
+                        width: 36
+                        height: 36
+                        radius: 8
+                        color: Qt.rgba(1, 1, 1, 0.08)
+                        Text { anchors.centerIn: parent; text: "−"; color: settingsWindow.ink; font.pixelSize: 20 }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: settingsWindow.host.setBitrate(settingsWindow.host.bitrate - 1)
+                        }
+                    }
+                    Rectangle {
+                        width: 36
+                        height: 36
+                        radius: 8
+                        color: Qt.rgba(1, 1, 1, 0.08)
+                        Text { anchors.centerIn: parent; text: "+"; color: settingsWindow.ink; font.pixelSize: 20 }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: settingsWindow.host.setBitrate(settingsWindow.host.bitrate + 1)
+                        }
+                    }
+                }
+
+                Text {
+                    text: settingsWindow.host.words.bind + "  " + settingsWindow.host.bind
+                    color: settingsWindow.ink
+                    font.pixelSize: 18
+                }
+                Row {
+                    spacing: 18
+                    Text {
+                        text: settingsWindow.host.words.english
+                        color: settingsWindow.ink
+                        font.pixelSize: 16
+                        font.bold: settingsWindow.host.language === "en"
+                        MouseArea { anchors.fill: parent; onClicked: settingsWindow.host.chooseLanguage("en") }
+                    }
+                    Text {
+                        text: settingsWindow.host.words.russian
+                        color: settingsWindow.ink
+                        font.pixelSize: 16
+                        font.bold: settingsWindow.host.language === "ru"
+                        MouseArea { anchors.fill: parent; onClicked: settingsWindow.host.chooseLanguage("ru") }
+                    }
+                }
             }
         }
     }
@@ -662,16 +970,31 @@ Window {
         FirstLaunch {}
     }
 
-    Rectangle {
-        id: background
+    Item {
         anchors.fill: parent
-        color: plashka.alarm ? "#ff0000" : root.themeColor
-    }
+        clip: true
 
-    Text {
-        id: label
-        anchors.centerIn: parent
-        color: "white"
-        text: ""
+        Rectangle {
+            id: background
+            width: parent.width
+            height: parent.height
+            radius: 18
+            x: (1 - root.slide) * width
+            color: plashka.alarm ? "#ff0000" : root.themeColor
+            border.width: 1
+            border.color: label.color
+
+            Text {
+                id: label
+                anchors.centerIn: parent
+                width: parent.width - 48
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                color: plashka.alarm ? "#ffffff" : (root.themeColors.text ? root.themeColors.text : "#ffffff")
+                font.pixelSize: 22
+                font.bold: true
+                text: ""
+            }
+        }
     }
 }
