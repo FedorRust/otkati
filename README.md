@@ -1,4 +1,4 @@
-# Откаты
+# Otkati
 
 Instant replay for Hyprland. The ring keeps the last minutes of one monitor, the desktop audio, and the microphone. A bind saves an mp4 from that ring.
 
@@ -32,7 +32,7 @@ The face waits for a 1 in /tmp/otkati-bind. For Hyprland:
 bind = ALT, Z, exec, sh -c 'printf 1 > /tmp/otkati-bind'
 After that, Alt+Z asks the ring to save an otkat and shows a short card on the ring monitor. Focus stays in the game.
 
-
+# Откаты
 
 Программа мгновенного повтора для Hyprland. Кольцо держит последние минуты одного монитора, звука выхода и микрофона. По бинду из кольца сохраняется mp4.
 
