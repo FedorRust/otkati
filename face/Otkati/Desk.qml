@@ -61,7 +61,7 @@ Item {
             { id: "ring", icon: "ring", title: w.navRing, blob: [w.navRing, w.switch, w.length, w.ringPlace, w.memory, w.disk].join("\n") },
             { id: "picture", icon: "picture", title: w.navPicture, blob: [w.navPicture, w.resolutionShare, w.bitrate, w.encoder, "H.264", "HEVC", "AV1"].join("\n") },
             { id: "monitor", icon: "monitor", title: w.navMonitor, blob: [w.navMonitor, w.ringMonitor].join("\n") },
-            { id: "look", icon: "look", title: w.navLook, blob: [w.navLook, w.language, w.theme, w.english, w.russian].join("\n") },
+            { id: "look", icon: "look", title: w.navLook, blob: [w.navLook, w.language, w.theme, w.themeCredit, w.english, w.russian].join("\n") },
             { id: "folder", icon: "folder", title: w.navFolder, blob: [w.navFolder, w.otkatFolder, w.bind].join("\n") }
         ]
     }
@@ -915,6 +915,14 @@ Item {
 
                 Card {
                     heading: host.words.theme
+                    Text {
+                        width: parent.width
+                        text: host.words.themeCredit
+                        color: root.muted
+                        font.family: root.faceFont
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                    }
                     Repeater {
                         model: host.readyThemes
                         delegate: SettingRow {
@@ -922,7 +930,6 @@ Item {
                             width: parent.width
                             glyph: root.icon("theme")
                             title: modelData
-                            hint: host.words.themeHint
                             clickable: true
                             onActivated: host.setTheme(modelData)
                             Mark { chosen: host.themeName === modelData }
