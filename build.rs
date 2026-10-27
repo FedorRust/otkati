@@ -3,7 +3,7 @@ use std::process::Command;
 
 fn tool_args(flag: &str) -> Vec<String> {
     let output = Command::new("pkg-config")
-        .args([flag, "Qt6Qml", "Qt6Core"])
+        .args([flag, "Qt6Qml", "Qt6Gui", "Qt6Core"])
         .output()
         .expect("pkg-config Qt6Qml Qt6Core");
     assert!(output.status.success(), "pkg-config {flag} failed");

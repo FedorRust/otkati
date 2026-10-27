@@ -1,0 +1,61 @@
+#!/bin/sh
+# Install the packages, build the ring, and start it. Run this as yourself, from a Hyprland terminal.
+set -eu
+
+if [ "$(id -u)" -eq 0 ]; then
+    echo "Запусти это своим пользователем, не через sudo."
+    echo "Run this as your user, not as root."
+    exit 1
+fi
+
+if ! command -v pacman >/dev/null 2>&1; then
+    echo "Нужен Arch, CachyOS или другой дистрибутив с pacman."
+    echo "This needs Arch, CachyOS, or another system with pacman."
+    exit 1
+fi
+
+if ! command -v sudo >/dev/null 2>&1; then
+    echo "Нет sudo. Поставь пакеты из этого скрипта через root и запусти скрипт снова."
+    echo "sudo is missing. Install the packages below as root, then run this again."
+    exit 1
+fi
+
+self=$0
+while [ -L "$self" ]; do
+    link=$(readlink "$self")
+    case $link in
+        /*) self=$link ;;
+        *) self=$(dirname "$self")/$link ;;
+    esac
+done
+root=$(CDPATH= cd -- "$(dirname "$self")" && pwd)
+
+echo "Спрошу пароль. Буквы при вводе не видны."
+echo "Asking for your password. Typed letters stay hidden."
+sudo -v
+
+echo "Ставлю пакеты."
+echo "Installing packages."
+sudo pacman -S --needed --noconfirm \
+    git base-devel rust \
+    qt6-base qt6-declarative qt6-wayland \
+    python python-gobject \
+    ffmpeg gpu-screen-recorder \
+    xdg-desktop-portal xdg-desktop-portal-hyprland \
+    pipewire pipewire-pulse wireplumber \
+    adwaita-fonts
+
+echo "Собираю программу. Первый раз это несколько минут."
+echo "Building. The first time takes a few minutes."
+(cd "$root" && env -u CARGO_TARGET_DIR cargo build --release --bin otkati-ring)
+
+if [ -z "${XDG_RUNTIME_DIR:-}" ] || ! systemctl --user is-active --quiet graphical-session.target; then
+    echo "Пакеты стоят, программа собрана. Открой терминал уже внутри Hyprland и выполни:"
+    echo "Packages are in and the build is done. Open a terminal inside Hyprland and run:"
+    echo "  $root/install"
+    exit 0
+fi
+
+"$root/otkati"
+echo "Запущено. Окно настроек должно открыться. Откаты пишутся в ~/Videos/Откаты"
+echo "Running. The settings window should open. Clips go to ~/Videos/Откаты"

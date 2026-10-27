@@ -43,6 +43,24 @@ if [ -d "$HOME/.cargo/bin" ]; then
     ln -sfn "$root/otkati" "$HOME/.cargo/bin/otkati"
 fi
 
+data=${XDG_DATA_HOME:-$HOME/.local/share}
+mkdir -p "$data/icons/hicolor/scalable/apps" "$data/applications"
+cp -f "$root/face/otkati.svg" "$data/icons/hicolor/scalable/apps/otkati.svg"
+cat > "$data/applications/otkati.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Otkati
+Comment=Instant replay for Hyprland
+Exec=$root/otkati
+Icon=otkati
+Terminal=false
+Categories=AudioVideo;
+StartupWMClass=otkati
+EOF
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t "$data/icons/hicolor" >/dev/null 2>&1 || true
+fi
+
 systemctl --user daemon-reload
 systemctl --user reset-failed otkati-ring.service otkati-face.service
 systemctl --user enable otkati-ring.service otkati-face.service

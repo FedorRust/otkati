@@ -57,26 +57,12 @@ Window {
     property var readyThemes: []
     property var themeByName: ({})
     property var settingsSurface: null
-    property var firstLaunchOverlay: null
     property bool firstLaunchPlayed: false
-    // Live session only. Tests leave both off, so they never touch Hyprland or the shell shaders.
+    // Live session only. Tests leave this off, so they never touch Hyprland.
     property bool grabBind: false
-    property bool shellSplash: false
     property string bindMarkPath: "/tmp/otkati-bind"
-    readonly property string shellAssets: homePath + "/.local/share/serpantinum/src/assets"
-    // Connected monitors. The overlay covers only the ring monitor.
     property var monitors: []
-    readonly property bool firstLaunchVisible: firstLaunchOverlay !== null && firstLaunchOverlay.visible
-    readonly property string firstLaunchMonitor: firstLaunchOverlay ? firstLaunchOverlay.monitorName : ""
-    readonly property int firstLaunchWidth: firstLaunchOverlay ? firstLaunchOverlay.width : 0
-    readonly property int firstLaunchHeight: firstLaunchOverlay ? firstLaunchOverlay.height : 0
-    readonly property bool firstLaunchFullScreen: firstLaunchOverlay !== null
-            && firstLaunchOverlay.coversMonitor
-            && firstLaunchOverlay.width === firstLaunchOverlay.monitorWidth
-            && firstLaunchOverlay.height === firstLaunchOverlay.monitorHeight
-    readonly property string firstLaunchStep: firstLaunchOverlay ? firstLaunchOverlay.step : ""
-    readonly property real screenWipe: firstLaunchOverlay ? firstLaunchOverlay.wipe : 0
-    readonly property real screenWipeWidth: firstLaunchOverlay ? firstLaunchOverlay.screenWipeWidth : 0
+    readonly property bool firstLaunchVisible: false
     readonly property var wordsByLanguage: ({
         en: {
             length: "Length",
@@ -122,11 +108,7 @@ Window {
             russian: "Russian",
             nothingToSave: "Nothing to save",
             clipDidNotSave: "Couldn't save the clip",
-            saved: "Saved",
-            continueButton: "Continue",
-            welcome: "Welcome",
-            kept: "The last minutes are already kept.",
-            bindSaves: "Alt+Z saves a clip."
+            saved: "Saved"
         },
         ru: {
             length: "Длина",
@@ -172,31 +154,10 @@ Window {
             russian: "Русский",
             nothingToSave: "Сохранять нечего",
             clipDidNotSave: "Откат не сохранился",
-            saved: "Откат сохранён",
-            continueButton: "Дальше",
-            welcome: "Добро пожаловать",
-            kept: "Последние минуты уже пишутся.",
-            bindSaves: "Alt+Z сохраняет откат."
+            saved: "Откат сохранён"
         }
     })
     readonly property var words: wordsByLanguage[language] || wordsByLanguage.en
-    readonly property var firstLaunchLines: [
-        words.welcome,
-        words.kept,
-        words.bindSaves,
-        "FedorRust"
-    ]
-    readonly property string firstLaunchButton: firstLaunchOverlay ? firstLaunchOverlay.buttonText : ""
-    readonly property var typedLines: firstLaunchOverlay ? firstLaunchOverlay.typedLines : []
-    readonly property color penguinOutlineColor: firstLaunchOverlay ? firstLaunchOverlay.outlineColor : "transparent"
-    readonly property color penguinFillColor: firstLaunchOverlay ? firstLaunchOverlay.fillColor : "transparent"
-    readonly property color screenWipeColor: firstLaunchOverlay ? firstLaunchOverlay.wipeColor : "transparent"
-    readonly property color firstLaunchTextColor: firstLaunchOverlay ? firstLaunchOverlay.lineColor : "transparent"
-    readonly property color firstLaunchButtonColor: firstLaunchOverlay ? firstLaunchOverlay.lineColor : "transparent"
-    readonly property real penguinFillLevel: firstLaunchOverlay ? firstLaunchOverlay.fillLevel : 0
-    readonly property real penguinFillTop: firstLaunchOverlay ? firstLaunchOverlay.penguinFillTop : 0
-    readonly property real penguinFillHeight: firstLaunchOverlay ? firstLaunchOverlay.penguinFillHeight : 0
-    readonly property real penguinHeight: firstLaunchOverlay ? firstLaunchOverlay.penguinHeight : 0
     readonly property color settingsColor: settingsSurface ? settingsSurface.color : "transparent"
     readonly property color settingsTextColor: settingsSurface ? settingsSurface.ink : "transparent"
     readonly property bool settingsVisible: settingsSurface ? settingsSurface.open : false
@@ -355,17 +316,14 @@ Window {
     }
 
     function applyTheme(name, colors) {
-        const cover = !firstLaunchPlayed && ringMonitorGeometry() !== null
         if (!settingsSurface)
-            settingsSurface = settingsWindowComponent.createObject(null, { host: root, covered: cover })
+            settingsSurface = settingsWindowComponent.createObject(null, { host: root })
         themeName = name
         themeColors = colors
         themeColor = colors.base
         settingsSurface.color = colors.base
         settingsSurface.ink = colors.text
-        settingsSurface.covered = cover
-        if (!cover)
-            placeSettings(settingsSurface)
+        placeSettings(settingsSurface)
         settingsSurface.open = true
     }
 
@@ -453,71 +411,8 @@ Window {
     function playFirstLaunch() {
         if (firstLaunchPlayed)
             return
-        const monitor = ringMonitorGeometry()
-        if (!monitor)
-            return
         firstLaunchPlayed = true
         rememberTheme()
-        if (firstLaunchOverlay)
-            return
-        const overlay = firstLaunchComponent.createObject(null, {
-            monitorName: monitor.name,
-            monitorWidth: monitor.width,
-            monitorHeight: monitor.height,
-            width: monitor.width,
-            height: monitor.height,
-            coversMonitor: true,
-            lines: Qt.binding(function() { return root.firstLaunchLines }),
-            wipeColor: Qt.binding(function() { return root.themeColors.base }),
-            lineColor: Qt.binding(function() { return root.themeColors.text }),
-            outlineColor: Qt.binding(function() { return root.themeColors.text }),
-            fillColor: Qt.binding(function() { return root.themeColors.blue }),
-            buttonText: Qt.binding(function() { return root.words.continueButton }),
-            assetsDir: root.shellSplash ? root.shellAssets : "",
-            crustColor: Qt.binding(function() { return root.themeColors.crust || root.themeColors.base }),
-            surfaceColor: Qt.binding(function() { return root.themeColors.surface1 || root.themeColors.base }),
-            orbColor: Qt.binding(function() { return root.themeColors.mauve || root.themeColors.blue }),
-            mutedColor: Qt.binding(function() { return root.themeColors.subtext0 || root.themeColors.text })
-        })
-        if (!overlay) {
-            if (settingsSurface)
-                settingsSurface.covered = false
-            return
-        }
-        const screen = screenNamed(monitor.name)
-        if (screen) {
-            overlay.screen = screen
-            overlay.visibility = Window.FullScreen
-            if (overlay.width !== monitor.width || overlay.height !== monitor.height) {
-                overlay.visibility = Window.Windowed
-                overlay.width = monitor.width
-                overlay.height = monitor.height
-            }
-        }
-        overlay.continued.connect(continueFirstLaunch)
-        overlay.escaped.connect(escapeFirstLaunch)
-        firstLaunchOverlay = overlay
-    }
-
-    function overlayCovers(name) {
-        return firstLaunchVisible && firstLaunchMonitor === name
-    }
-
-    function continueFirstLaunch() {
-        dismissFirstLaunch()
-    }
-
-    function escapeFirstLaunch() {
-        dismissFirstLaunch()
-    }
-
-    function dismissFirstLaunch() {
-        if (firstLaunchOverlay)
-            firstLaunchOverlay.visible = false
-        if (!settingsSurface)
-            return
-        placeSettings(settingsSurface)
-        settingsSurface.covered = false
     }
 
     function storedTheme() {
@@ -585,8 +480,6 @@ Window {
     Component.onDestruction: {
         if (settingsSurface)
             settingsSurface.destroy()
-        if (firstLaunchOverlay)
-            firstLaunchOverlay.destroy()
     }
 
     function setLanguage(next) {
@@ -855,10 +748,9 @@ Window {
             property var host: null
             property color ink: "transparent"
             property bool open: false
-            property bool covered: false
             title: "otkati-settings"
             flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-            visible: open && !covered
+            visible: open
             width: 1080
             height: 700
             minimumWidth: 1080
@@ -870,16 +762,11 @@ Window {
 
             Desk {
                 anchors.fill: parent
-                visible: !settingsWindow.covered && settingsWindow.host
+                visible: settingsWindow.host
                 host: settingsWindow.host
                 ink: settingsWindow.ink
             }
         }
-    }
-
-    Component {
-        id: firstLaunchComponent
-        FirstLaunch {}
     }
 
     Item {

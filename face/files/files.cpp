@@ -1,9 +1,14 @@
 #include "files.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
+#include <QIcon>
 #include <QQmlEngine>
+
+#include <dlfcn.h>
 
 #include <cstring>
 #include <cerrno>
@@ -106,10 +111,28 @@ QString Files::ask(const QString &line) const {
     return QString::fromUtf8(reply).trimmed();
 }
 
+static void iconAnchor() {}
+
+QString bundledIcon() {
+    Dl_info info{};
+    if (::dladdr(reinterpret_cast<void *>(&iconAnchor), &info) == 0 || info.dli_fname == nullptr)
+        return {};
+    QDir dir(QFileInfo(QString::fromUtf8(info.dli_fname)).absolutePath());
+    if (!dir.cdUp() || !dir.cdUp())
+        return {};
+    return dir.filePath(QStringLiteral("otkati.svg"));
+}
+
 void FilesPlugin::registerTypes(const char *uri) {
     // The face outlives the shell that started it. A hangup from that shell
     // is not the person closing the program.
     std::signal(SIGHUP, SIG_IGN);
+    if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
+        app->setDesktopFileName(QStringLiteral("otkati"));
+        const QString icon = bundledIcon();
+        if (QFileInfo::exists(icon))
+            app->setWindowIcon(QIcon(icon));
+    }
     qmlRegisterSingletonType<Files>(uri, 1, 0, "Files",
                                     [](QQmlEngine *, QJSEngine *) -> QObject * { return new Files; });
 }
