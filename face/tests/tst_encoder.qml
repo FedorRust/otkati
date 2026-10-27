@@ -41,15 +41,23 @@ TestCase {
         const face = createTemporaryObject(faceComponent, null)
         verify(face)
         face.persistEncoder = true
-        face.encoderStorePath = store
+        face.knobsPath = store
         face.chooseEncoder("AV1")
+        face.setBitrate(50)
+        face.setLength(120)
+        face.setResolutionShare(80)
+        face.setRingPlace(1)
         compare(face.encoder, "AV1")
 
         const again = createTemporaryObject(faceComponent, null)
         verify(again)
-        again.encoderStorePath = store
-        again.loadEncoder()
+        again.knobsPath = store
+        again.loadKnobs()
         compare(again.encoder, "AV1")
+        compare(again.bitrate, 50)
+        compare(again.length, 120)
+        compare(again.resolutionShare, 80)
+        compare(again.ringPlace, 1)
     }
 
     function test_the_knob_lists_three_items_and_chooses_h264() {

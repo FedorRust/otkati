@@ -42,10 +42,10 @@ pub fn run_ring_process() {
     if std::env::var_os("OTKATI_HOME").is_some() {
         ring.persist_at(home.clone());
     }
-    let codec = read_encoder_choice(&home);
+    let plan = read_plan(&home);
     let capture = if std::env::var_os("OTKATI_CAPTURE").is_some() {
         let screen = ring.monitor().map(|screen| screen.name().to_string());
-        screen.and_then(|screen| start_live_capture(&screen, &home, &mut ring, codec))
+        screen.and_then(|screen| start_live_capture(&screen, &home, &mut ring, &plan))
     } else {
         None
     };
@@ -102,6 +102,27 @@ fn system_screen_question() -> Option<Screen> {
 /// A served ring with `OTKATI_SOCKET` set. Systemd leaves stdin closed, so the
 /// ring listens here instead of exiting on that end of file. One line in, one
 /// line out, the same words stdin serve already speaks.
+#[derive(Clone, PartialEq, Eq)]
+struct RecordPlan {
+    codec: String,
+    bitrate_mbit: u32,
+    length_secs: u32,
+    share: u32,
+    storage: String,
+}
+
+impl RecordPlan {
+    fn standard() -> Self {
+        Self {
+            codec: "h264".to_string(),
+            bitrate_mbit: 25,
+            length_secs: 600,
+            share: 100,
+            storage: "ram".to_string(),
+        }
+    }
+}
+
 struct LiveCapture {
     child: Child,
     ipc: PathBuf,
@@ -109,7 +130,7 @@ struct LiveCapture {
     replay: Arc<Mutex<Option<PathBuf>>>,
     screen: String,
     home: PathBuf,
-    codec: String,
+    plan: RecordPlan,
 }
 
 impl Drop for LiveCapture {
@@ -123,6 +144,10 @@ fn encoder_path(home: &Path) -> PathBuf {
     home.join(".local/state/otkati/encoder")
 }
 
+fn knobs_path(home: &Path) -> PathBuf {
+    home.join(".local/state/otkati/knobs")
+}
+
 fn recorder_codec(choice: &str) -> &'static str {
     match choice.trim() {
         "hevc" | "HEVC" => "hevc",
@@ -131,22 +156,182 @@ fn recorder_codec(choice: &str) -> &'static str {
     }
 }
 
-fn read_encoder_choice(home: &Path) -> &'static str {
-    let Ok(text) = std::fs::read_to_string(encoder_path(home)) else {
-        return "h264";
-    };
-    recorder_codec(text.trim())
+fn bitrate_mbit(text: &str) -> Option<u32> {
+    let n: u32 = text.trim().parse().ok()?;
+    (8..=80).contains(&n).then_some(n)
 }
 
-fn write_encoder_choice(home: &Path, codec: &str) {
-    let path = encoder_path(home);
+fn length_secs(text: &str) -> Option<u32> {
+    let n: u32 = text.trim().parse().ok()?;
+    (15..=1200).contains(&n).then_some(n)
+}
+
+fn share_percent(text: &str) -> Option<u32> {
+    let n: u32 = text.trim().parse().ok()?;
+    ((50..=100).contains(&n) && n % 10 == 0).then_some(n)
+}
+
+fn storage_name(text: &str) -> Option<&'static str> {
+    match text.trim() {
+        "ram" | "memory" | "0" => Some("ram"),
+        "disk" | "1" => Some("disk"),
+        _ => None,
+    }
+}
+
+fn read_plan(home: &Path) -> RecordPlan {
+    let mut plan = RecordPlan::standard();
+    let text = std::fs::read_to_string(knobs_path(home)).unwrap_or_default();
+    if text.is_empty() {
+        if let Ok(old) = std::fs::read_to_string(encoder_path(home)) {
+            plan.codec = recorder_codec(old.trim()).to_string();
+        }
+        return plan;
+    }
+    for line in text.lines() {
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        match key.trim() {
+            "codec" => plan.codec = recorder_codec(value).to_string(),
+            "bitrate" => {
+                if let Some(n) = bitrate_mbit(value) {
+                    plan.bitrate_mbit = n;
+                }
+            }
+            "length" => {
+                if let Some(n) = length_secs(value) {
+                    plan.length_secs = n;
+                }
+            }
+            "share" => {
+                if let Some(n) = share_percent(value) {
+                    plan.share = n;
+                }
+            }
+            "place" => {
+                if let Some(n) = storage_name(value) {
+                    plan.storage = n.to_string();
+                }
+            }
+            _ => {}
+        }
+    }
+    plan
+}
+
+fn write_plan(home: &Path, plan: &RecordPlan) {
+    let path = knobs_path(home);
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let _ = std::fs::write(path, format!("{codec}\n"));
+    let text = format!(
+        "codec={}\nbitrate={}\nlength={}\nshare={}\nplace={}\n",
+        plan.codec, plan.bitrate_mbit, plan.length_secs, plan.share, plan.storage
+    );
+    let _ = std::fs::write(path, text);
 }
 
-fn start_live_capture(screen: &str, home: &Path, ring: &mut Ring, codec: &str) -> Option<LiveCapture> {
+fn even_side(full: u32, share: u32) -> u32 {
+    let scaled = full.saturating_mul(share) / 100;
+    let even = scaled & !1;
+    if even < 2 {
+        2
+    } else {
+        even
+    }
+}
+
+fn number_after(text: &str, key: &str) -> Option<u32> {
+    let rest = text.get(text.find(key)? + key.len()..)?;
+    let digits: String = rest
+        .trim_start()
+        .trim_start_matches(':')
+        .trim_start()
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse().ok()
+}
+
+fn frame_in_monitors_json(json: &str, name: &str) -> Option<(u32, u32)> {
+    let needle = format!("\"name\": \"{name}\"");
+    let start = json.find(&needle)?;
+    let rest = &json[start..];
+    let end = rest[needle.len()..]
+        .find("\"name\":")
+        .map(|index| index + needle.len())
+        .unwrap_or(rest.len());
+    let window = &rest[..end];
+    Some((number_after(window, "\"width\":")?, number_after(window, "\"height\":")?))
+}
+
+fn monitor_frame(name: &str) -> Option<(u32, u32)> {
+    let output = Command::new("hyprctl")
+        .args(["monitors", "-j"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    frame_in_monitors_json(&text, name)
+}
+
+fn recorder_args(
+    screen: &str,
+    plan: &RecordPlan,
+    frame: Option<(u32, u32)>,
+    replay_dir: &Path,
+    ipc: &Path,
+) -> Vec<String> {
+    let mut args = vec![
+        "-w".into(),
+        screen.into(),
+        "-f".into(),
+        "60".into(),
+        "-c".into(),
+        "mp4".into(),
+        "-r".into(),
+        plan.length_secs.to_string(),
+        "-replay-storage".into(),
+        plan.storage.clone(),
+        "-cursor".into(),
+        "yes".into(),
+        "-k".into(),
+        plan.codec.clone(),
+        "-encoder".into(),
+        "gpu".into(),
+        "-bm".into(),
+        "cbr".into(),
+        "-q".into(),
+        (plan.bitrate_mbit * 1000).to_string(),
+        "-a".into(),
+        "default_output|default_input".into(),
+    ];
+    if plan.share < 100 {
+        if let Some((width, height)) = frame {
+            args.push("-s".into());
+            args.push(format!(
+                "{}x{}",
+                even_side(width, plan.share),
+                even_side(height, plan.share)
+            ));
+        }
+    }
+    args.push("-o".into());
+    args.push(replay_dir.display().to_string());
+    args.push("-ipc".into());
+    args.push(ipc.display().to_string());
+    args
+}
+
+fn start_live_capture(
+    screen: &str,
+    home: &Path,
+    ring: &mut Ring,
+    plan: &RecordPlan,
+) -> Option<LiveCapture> {
     let replay_dir = home.join(".local/state/otkati/replay");
     std::fs::create_dir_all(&replay_dir).ok()?;
     let runtime = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
@@ -155,29 +340,9 @@ fn start_live_capture(screen: &str, home: &Path, ring: &mut Ring, codec: &str) -
         let _ = std::fs::create_dir_all(dir);
     }
     let _ = std::fs::remove_file(&ipc);
+    let frame = monitor_frame(screen);
     let child = Command::new("gpu-screen-recorder")
-        .arg("-w")
-        .arg(screen)
-        .arg("-f")
-        .arg("60")
-        .arg("-c")
-        .arg("mp4")
-        .arg("-r")
-        .arg("600")
-        .arg("-replay-storage")
-        .arg("ram")
-        .arg("-cursor")
-        .arg("yes")
-        .arg("-k")
-        .arg(codec)
-        .arg("-encoder")
-        .arg("gpu")
-        .arg("-a")
-        .arg("default_output|default_input")
-        .arg("-o")
-        .arg(&replay_dir)
-        .arg("-ipc")
-        .arg(&ipc)
+        .args(recorder_args(screen, plan, frame, &replay_dir, &ipc))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
@@ -193,7 +358,7 @@ fn start_live_capture(screen: &str, home: &Path, ring: &mut Ring, codec: &str) -
         replay,
         screen: screen.to_string(),
         home: home.to_path_buf(),
-        codec: codec.to_string(),
+        plan: plan.clone(),
     })
 }
 
@@ -212,18 +377,18 @@ fn copy_replay(replay: &Mutex<Option<PathBuf>>, path: &Path) -> std::io::Result<
 }
 
 impl LiveCapture {
-    /// Switch the recorder to another codec. The minutes already held are dropped.
-    fn use_codec(&mut self, ring: &mut Ring, codec: &str) {
-        if self.codec == codec {
+    /// Restart the recorder when a knob changed. The minutes already held are dropped.
+    fn apply(&mut self, ring: &mut Ring, plan: RecordPlan) {
+        if self.plan == plan {
             return;
         }
         let screen = self.screen.clone();
         let home = self.home.clone();
         let _ = self.child.kill();
         let _ = self.child.wait();
-        match start_live_capture(&screen, &home, ring, codec) {
+        match start_live_capture(&screen, &home, ring, &plan) {
             Some(next) => *self = next,
-            None => eprintln!("otkati-ring: could not restart the recorder as {codec}"),
+            None => eprintln!("otkati-ring: could not restart the recorder"),
         }
     }
 
@@ -233,7 +398,11 @@ impl LiveCapture {
         if self.child.try_wait().ok().flatten().is_some() {
             return;
         }
-        let seconds = self.started.elapsed().as_secs().min(10 * 60);
+        let seconds = self
+            .started
+            .elapsed()
+            .as_secs()
+            .min(u64::from(self.plan.length_secs));
         if seconds == 0 {
             return;
         }
@@ -381,11 +550,37 @@ fn dispatch(
         }
         "bind" => bind_line(ring, pending, arg),
         "commit" => commit_pending(ring, pending),
-        "encoder" => {
-            let codec = recorder_codec(arg);
-            write_encoder_choice(home, codec);
+        "encoder" | "bitrate" | "length" | "share" | "place" => {
+            let mut plan = read_plan(home);
+            let accepted = match command {
+                "encoder" => {
+                    plan.codec = recorder_codec(arg).to_string();
+                    true
+                }
+                "bitrate" => bitrate_mbit(arg).is_some_and(|n| {
+                    plan.bitrate_mbit = n;
+                    true
+                }),
+                "length" => length_secs(arg).is_some_and(|n| {
+                    plan.length_secs = n;
+                    true
+                }),
+                "share" => share_percent(arg).is_some_and(|n| {
+                    plan.share = n;
+                    true
+                }),
+                "place" => storage_name(arg).is_some_and(|n| {
+                    plan.storage = n.to_string();
+                    true
+                }),
+                _ => false,
+            };
+            if !accepted {
+                return "none".to_string();
+            }
+            write_plan(home, &plan);
             if let Some(capture) = capture {
-                capture.use_codec(ring, codec);
+                capture.apply(ring, plan);
             }
             "ok".to_string()
         }
@@ -423,7 +618,10 @@ fn commit_pending(ring: &mut Ring, pending: &mut Vec<PlashkaEvent>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::recorder_codec;
+    use super::{
+        even_side, frame_in_monitors_json, recorder_args, recorder_codec, RecordPlan,
+    };
+    use std::path::Path;
 
     #[test]
     fn the_recorder_hears_hevc_and_av1() {
@@ -433,6 +631,51 @@ mod tests {
         assert_eq!(recorder_codec("av1"), "av1");
         assert_eq!(recorder_codec("H.264"), "h264");
         assert_eq!(recorder_codec("nope"), "h264");
+    }
+
+    #[test]
+    fn the_knobs_reach_the_recorder() {
+        let mut plan = RecordPlan::standard();
+        plan.bitrate_mbit = 50;
+        plan.length_secs = 120;
+        plan.share = 50;
+        plan.storage = "disk".to_string();
+        plan.codec = "av1".to_string();
+        let args = recorder_args(
+            "HDMI-A-1",
+            &plan,
+            Some((1920, 1080)),
+            Path::new("/tmp/replay"),
+            Path::new("/tmp/replay.sock"),
+        );
+        let joined = args.join(" ");
+        assert!(joined.contains("-r 120"), "{joined}");
+        assert!(joined.contains("-replay-storage disk"), "{joined}");
+        assert!(joined.contains("-k av1"), "{joined}");
+        assert!(joined.contains("-bm cbr"), "{joined}");
+        assert!(joined.contains("-q 50000"), "{joined}");
+        assert!(joined.contains("-s 960x540"), "{joined}");
+
+        plan.share = 100;
+        let full = recorder_args(
+            "HDMI-A-1",
+            &plan,
+            Some((1920, 1080)),
+            Path::new("/tmp/replay"),
+            Path::new("/tmp/replay.sock"),
+        )
+        .join(" ");
+        assert!(!full.contains(" -s "), "{full}");
+        assert_eq!(even_side(1920, 80), 1536);
+        assert_eq!(even_side(1080, 80), 864);
+    }
+
+    #[test]
+    fn the_capture_screen_is_read_from_the_monitor_list() {
+        let json = r#"[{"name": "HDMI-A-1", "description": "x", "width": 1920, "height": 1080}, {"name": "DP-1", "width": 1680, "height": 1050}]"#;
+        assert_eq!(frame_in_monitors_json(json, "HDMI-A-1"), Some((1920, 1080)));
+        assert_eq!(frame_in_monitors_json(json, "DP-1"), Some((1680, 1050)));
+        assert_eq!(frame_in_monitors_json(json, "gone"), None);
     }
 }
 

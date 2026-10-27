@@ -177,6 +177,7 @@ Window {
     // The encoder the face hands to the ring. H.264 until the person switches.
     property string encoder: "H.264"
     property string encoderStorePath: homePath + "/.local/state/otkati/encoder"
+    property string knobsPath: homePath + "/.local/state/otkati/knobs"
     // The live face writes the choice. Tests leave this off.
     property bool persistEncoder: false
     readonly property var encoderItems: ["H.264", "HEVC", "AV1"]
@@ -502,26 +503,52 @@ Window {
         bind = chord
     }
 
+    function saveKnobs() {
+        if (!persistEncoder)
+            return
+        const place = ringPlace === Face.RingPlace.Disk ? "disk" : "ram"
+        Files.writeText(knobsPath, [
+            "codec=" + encoderWire(encoder),
+            "bitrate=" + bitrate,
+            "length=" + length,
+            "share=" + resolutionShare,
+            "place=" + place
+        ].join("\n") + "\n")
+    }
+
+    function tellRing(command, arg) {
+        if (grabBind)
+            Files.ask(command + "\t" + arg)
+    }
+
     function setResolutionShare(percent) {
         if (percent < 50 || percent > 100 || percent % 10 !== 0)
             return
         resolutionShare = percent
+        saveKnobs()
+        tellRing("share", String(percent))
     }
 
     function setBitrate(mbit) {
         if (mbit < 8 || mbit > 80 || mbit % 1 !== 0)
             return
         bitrate = mbit
+        saveKnobs()
+        tellRing("bitrate", String(mbit))
     }
 
     function setLength(seconds) {
         if (!Number.isInteger(seconds) || seconds < 15 || seconds > 1200)
             return
         length = seconds
+        saveKnobs()
+        tellRing("length", String(seconds))
     }
 
     function setRingPlace(place) {
         ringPlace = place
+        saveKnobs()
+        tellRing("place", place === Face.RingPlace.Disk ? "disk" : "ram")
     }
 
     function setOtkatFolder(path) {
@@ -571,27 +598,46 @@ Window {
         return "h264"
     }
 
-    function loadEncoder() {
-        const text = Files.readText(encoderStorePath).trim()
+    function applyCodec(text) {
         if (text === "hevc")
             encoder = "HEVC"
         else if (text === "av1")
             encoder = "AV1"
         else if (text === "h264")
             encoder = "H.264"
-        if (grabBind && (text === "h264" || text === "hevc" || text === "av1"))
-            Files.ask("encoder\t" + text)
+    }
+
+    function loadKnobs() {
+        const map = {}
+        Files.readText(knobsPath).split("\n").forEach(function (line) {
+            const cut = line.indexOf("=")
+            if (cut > 0)
+                map[line.slice(0, cut)] = line.slice(cut + 1).trim()
+        })
+        if (!map.codec)
+            map.codec = Files.readText(encoderStorePath).trim()
+        applyCodec(map.codec)
+        const bitrateN = parseInt(map.bitrate, 10)
+        if (bitrateN >= 8 && bitrateN <= 80)
+            bitrate = bitrateN
+        const lengthN = parseInt(map.length, 10)
+        if (lengthN >= 15 && lengthN <= 1200)
+            length = lengthN
+        const shareN = parseInt(map.share, 10)
+        if (shareN >= 50 && shareN <= 100 && shareN % 10 === 0)
+            resolutionShare = shareN
+        if (map.place === "disk")
+            ringPlace = Face.RingPlace.Disk
+        else if (map.place === "ram")
+            ringPlace = Face.RingPlace.Memory
     }
 
     function chooseEncoder(item) {
         if (!encoderSelectable(item))
             return
         encoder = item
-        if (!persistEncoder)
-            return
-        Files.writeText(encoderStorePath, encoderWire(item) + "\n")
-        if (grabBind)
-            Files.ask("encoder\t" + encoderWire(item))
+        saveKnobs()
+        tellRing("encoder", encoderWire(item))
     }
 
     function encoderMark(item) {

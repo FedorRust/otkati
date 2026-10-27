@@ -7,7 +7,7 @@ Face {
     persistTheme: true
     Component.onCompleted: {
         Qt.quitOnLastWindowClosed = false
-        loadEncoder()
+        loadKnobs()
         openSettings()
     }
 }
