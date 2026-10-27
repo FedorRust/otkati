@@ -1,4 +1,5 @@
 import QtQuick
+import QtCore
 import QtTest
 import Otkati 1.0
 
@@ -23,6 +24,32 @@ TestCase {
         face.userCataloguePath = ""
         face.loadCatalogue()
         face.setTheme(name)
+    }
+
+    property int storeSerial: 0
+
+    function freshStore() {
+        storeSerial += 1
+        let url = StandardPaths.writableLocation(StandardPaths.TempLocation).toString()
+        if (url.startsWith("file://"))
+            url = url.slice("file://".length)
+        return url + "/otkati-encoder-" + storeSerial + "-" + Date.now()
+    }
+
+    function test_the_choice_is_still_there_the_next_time_the_face_opens() {
+        const store = freshStore()
+        const face = createTemporaryObject(faceComponent, null)
+        verify(face)
+        face.persistEncoder = true
+        face.encoderStorePath = store
+        face.chooseEncoder("AV1")
+        compare(face.encoder, "AV1")
+
+        const again = createTemporaryObject(faceComponent, null)
+        verify(again)
+        again.encoderStorePath = store
+        again.loadEncoder()
+        compare(again.encoder, "AV1")
     }
 
     function test_the_knob_lists_three_items_and_chooses_h264() {
@@ -50,7 +77,7 @@ TestCase {
         compare(face.encoderMark("H.264"), "NVIDIA, AMD, Intel и компьютеры без аппаратного кодировщика")
         compare(face.encoderMark("HEVC"), "NVIDIA, включая 3060 Ti и 3070 Ti, и AMD или Intel, если карта умеет HEVC")
         compare(face.encoderMark("AV1"), "NVIDIA с 40-й серии и AMD с RX 7000")
-        compare(face.settingLabel("chooseH264"), "Выбирайте H.264")
+        compare(face.settingLabel("chooseH264"), "Выбирайте H.264, если не знаете, что выбирать")
         face.chooseLanguage("en")
         compare(face.encoderMark("H.264"), "NVIDIA, AMD, Intel, and machines with no hardware encoder")
     }
@@ -65,7 +92,7 @@ TestCase {
         compare(face.encoderSelectable("AV1"), true)
         compare(face.encoderSelectable("H.264"), true)
         compare(face.encoderSelectable("HEVC"), true)
-        compare(face.settingLabel("chooseH264"), "Choose H.264")
+        compare(face.settingLabel("chooseH264"), "Choose H.264 if you don't know what to choose")
 
         face.chooseEncoder("HEVC")
         compare(face.encoder, "HEVC")

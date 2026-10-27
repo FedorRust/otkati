@@ -42,17 +42,18 @@ pub fn run_ring_process() {
     if std::env::var_os("OTKATI_HOME").is_some() {
         ring.persist_at(home.clone());
     }
+    let codec = read_encoder_choice(&home);
     let capture = if std::env::var_os("OTKATI_CAPTURE").is_some() {
         let screen = ring.monitor().map(|screen| screen.name().to_string());
-        screen.and_then(|screen| start_live_capture(&screen, &home, &mut ring))
+        screen.and_then(|screen| start_live_capture(&screen, &home, &mut ring, codec))
     } else {
         None
     };
     if std::env::var_os("OTKATI_SERVE").is_some() {
         if let Ok(path) = std::env::var("OTKATI_SOCKET") {
-            serve_socket(ring, Path::new(&path), capture);
+            serve_socket(ring, Path::new(&path), capture, &home);
         } else {
-            serve(ring, capture);
+            serve(ring, capture, &home);
         }
     } else {
         // The answer and any minutes already loaded stay in this process.
@@ -106,6 +107,9 @@ struct LiveCapture {
     ipc: PathBuf,
     started: Instant,
     replay: Arc<Mutex<Option<PathBuf>>>,
+    screen: String,
+    home: PathBuf,
+    codec: String,
 }
 
 impl Drop for LiveCapture {
@@ -115,7 +119,34 @@ impl Drop for LiveCapture {
     }
 }
 
-fn start_live_capture(screen: &str, home: &Path, ring: &mut Ring) -> Option<LiveCapture> {
+fn encoder_path(home: &Path) -> PathBuf {
+    home.join(".local/state/otkati/encoder")
+}
+
+fn recorder_codec(choice: &str) -> &'static str {
+    match choice.trim() {
+        "hevc" | "HEVC" => "hevc",
+        "av1" | "AV1" => "av1",
+        _ => "h264",
+    }
+}
+
+fn read_encoder_choice(home: &Path) -> &'static str {
+    let Ok(text) = std::fs::read_to_string(encoder_path(home)) else {
+        return "h264";
+    };
+    recorder_codec(text.trim())
+}
+
+fn write_encoder_choice(home: &Path, codec: &str) {
+    let path = encoder_path(home);
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(path, format!("{codec}\n"));
+}
+
+fn start_live_capture(screen: &str, home: &Path, ring: &mut Ring, codec: &str) -> Option<LiveCapture> {
     let replay_dir = home.join(".local/state/otkati/replay");
     std::fs::create_dir_all(&replay_dir).ok()?;
     let runtime = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
@@ -138,7 +169,7 @@ fn start_live_capture(screen: &str, home: &Path, ring: &mut Ring) -> Option<Live
         .arg("-cursor")
         .arg("yes")
         .arg("-k")
-        .arg("h264")
+        .arg(codec)
         .arg("-encoder")
         .arg("gpu")
         .arg("-a")
@@ -160,6 +191,9 @@ fn start_live_capture(screen: &str, home: &Path, ring: &mut Ring) -> Option<Live
         ipc,
         started: Instant::now(),
         replay,
+        screen: screen.to_string(),
+        home: home.to_path_buf(),
+        codec: codec.to_string(),
     })
 }
 
@@ -178,6 +212,21 @@ fn copy_replay(replay: &Mutex<Option<PathBuf>>, path: &Path) -> std::io::Result<
 }
 
 impl LiveCapture {
+    /// Switch the recorder to another codec. The minutes already held are dropped.
+    fn use_codec(&mut self, ring: &mut Ring, codec: &str) {
+        if self.codec == codec {
+            return;
+        }
+        let screen = self.screen.clone();
+        let home = self.home.clone();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        match start_live_capture(&screen, &home, ring, codec) {
+            Some(next) => *self = next,
+            None => eprintln!("otkati-ring: could not restart the recorder as {codec}"),
+        }
+    }
+
     /// Save what the recorder is holding and hand that time to the ring.
     /// The file itself is copied when the saved otkat is committed.
     fn pour_into(&mut self, ring: &mut Ring) {
@@ -230,7 +279,7 @@ fn save_replay(ipc: &Path, seconds: u64) -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
-fn serve_socket(mut ring: Ring, path: &Path, mut capture: Option<LiveCapture>) {
+fn serve_socket(mut ring: Ring, path: &Path, mut capture: Option<LiveCapture>, home: &Path) {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -249,7 +298,7 @@ fn serve_socket(mut ring: Ring, path: &Path, mut capture: Option<LiveCapture>) {
         let Ok(stream) = conn else {
             continue;
         };
-        let _ = answer_one(&mut ring, &mut pending, capture.as_mut(), stream);
+        let _ = answer_one(&mut ring, &mut pending, capture.as_mut(), home, stream);
     }
 }
 
@@ -257,6 +306,7 @@ fn answer_one(
     ring: &mut Ring,
     pending: &mut Vec<PlashkaEvent>,
     capture: Option<&mut LiveCapture>,
+    home: &Path,
     mut stream: UnixStream,
 ) -> std::io::Result<()> {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
@@ -275,13 +325,13 @@ fn answer_one(
         }
     }
     let line = String::from_utf8_lossy(&buf);
-    let reply = dispatch(ring, pending, capture, line.trim_end());
+    let reply = dispatch(ring, pending, capture, home, line.trim_end());
     writeln!(stream, "{reply}")?;
     stream.flush()?;
     Ok(())
 }
 
-fn serve(mut ring: Ring, mut capture: Option<LiveCapture>) {
+fn serve(mut ring: Ring, mut capture: Option<LiveCapture>, home: &Path) {
     let stdin = std::io::stdin();
     let mut reader = stdin.lock();
     let mut line = String::new();
@@ -292,7 +342,7 @@ fn serve(mut ring: Ring, mut capture: Option<LiveCapture>) {
         if read == 0 {
             break;
         }
-        let reply = dispatch(&mut ring, &mut pending, capture.as_mut(), line.trim_end());
+        let reply = dispatch(&mut ring, &mut pending, capture.as_mut(), home, line.trim_end());
         println!("{reply}");
         let _ = std::io::stdout().flush();
     }
@@ -301,12 +351,13 @@ fn serve(mut ring: Ring, mut capture: Option<LiveCapture>) {
 fn dispatch(
     ring: &mut Ring,
     pending: &mut Vec<PlashkaEvent>,
-    capture: Option<&mut LiveCapture>,
+    mut capture: Option<&mut LiveCapture>,
+    home: &Path,
     line: &str,
 ) -> String {
     let (command, arg) = line.split_once('\t').unwrap_or((line, ""));
     if command == "bind" {
-        if let Some(capture) = capture {
+        if let Some(ref mut capture) = capture {
             capture.pour_into(ring);
         }
     }
@@ -330,6 +381,14 @@ fn dispatch(
         }
         "bind" => bind_line(ring, pending, arg),
         "commit" => commit_pending(ring, pending),
+        "encoder" => {
+            let codec = recorder_codec(arg);
+            write_encoder_choice(home, codec);
+            if let Some(capture) = capture {
+                capture.use_codec(ring, codec);
+            }
+            "ok".to_string()
+        }
         _ => "none".to_string(),
     }
 }
@@ -359,6 +418,21 @@ fn commit_pending(ring: &mut Ring, pending: &mut Vec<PlashkaEvent>) -> String {
     match ring.later_plashka() {
         Some(PlashkaEvent::ClipDidNotSave) => "clip-did-not-save".to_string(),
         _ => "ok".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::recorder_codec;
+
+    #[test]
+    fn the_recorder_hears_hevc_and_av1() {
+        assert_eq!(recorder_codec("HEVC"), "hevc");
+        assert_eq!(recorder_codec("hevc"), "hevc");
+        assert_eq!(recorder_codec("AV1"), "av1");
+        assert_eq!(recorder_codec("av1"), "av1");
+        assert_eq!(recorder_codec("H.264"), "h264");
+        assert_eq!(recorder_codec("nope"), "h264");
     }
 }
 

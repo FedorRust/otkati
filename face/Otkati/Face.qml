@@ -52,6 +52,8 @@ Window {
     property string shellSettingsPath: homePath + "/.config/serpantinum/settings.json"
     property string matugenColorsPath: homePath + "/.local/state/serpantinum/qs_matugen_colors.json"
     property string themeStorePath: homePath + "/.local/state/otkati/theme.json"
+    // The live face writes the theme. Tests leave this off, so they cannot paint over it.
+    property bool persistTheme: false
     property string themeName: ""
     property var themeColors: ({})
     property var readyThemes: []
@@ -72,7 +74,7 @@ Window {
             h264: "NVIDIA, AMD, Intel, and machines with no hardware encoder",
             hevc: "NVIDIA, including the 3060 Ti and 3070 Ti, and AMD or Intel when the card can do HEVC",
             av1: "NVIDIA from the 40 series and AMD from the RX 7000",
-            chooseH264: "Choose H.264",
+            chooseH264: "Choose H.264 if you don't know what to choose",
             ringPlace: "Ring place",
             ringMonitor: "Ring monitor",
             bind: "Bind",
@@ -118,7 +120,7 @@ Window {
             h264: "NVIDIA, AMD, Intel и компьютеры без аппаратного кодировщика",
             hevc: "NVIDIA, включая 3060 Ti и 3070 Ti, и AMD или Intel, если карта умеет HEVC",
             av1: "NVIDIA с 40-й серии и AMD с RX 7000",
-            chooseH264: "Выбирайте H.264",
+            chooseH264: "Выбирайте H.264, если не знаете, что выбирать",
             ringPlace: "Место кольца",
             ringMonitor: "Монитор кольца",
             bind: "Бинд",
@@ -174,6 +176,9 @@ Window {
     property int bitrate: 25
     // The encoder the face hands to the ring. H.264 until the person switches.
     property string encoder: "H.264"
+    property string encoderStorePath: homePath + "/.local/state/otkati/encoder"
+    // The live face writes the choice. Tests leave this off.
+    property bool persistEncoder: false
     readonly property var encoderItems: ["H.264", "HEVC", "AV1"]
     // Items the ring says this card can do. H.264 until the ring says otherwise.
     property var offeredEncoders: ["H.264"]
@@ -430,6 +435,8 @@ Window {
     function rememberTheme() {
         if (!themeStorePath || !themeName)
             return
+        if (!persistTheme && themeStorePath === homePath + "/.local/state/otkati/theme.json")
+            return
         const payload = {
             name: themeName,
             colors: themeColors
@@ -556,10 +563,35 @@ Window {
         return item === "H.264" || item === "HEVC" || item === "AV1"
     }
 
+    function encoderWire(item) {
+        if (item === "HEVC")
+            return "hevc"
+        if (item === "AV1")
+            return "av1"
+        return "h264"
+    }
+
+    function loadEncoder() {
+        const text = Files.readText(encoderStorePath).trim()
+        if (text === "hevc")
+            encoder = "HEVC"
+        else if (text === "av1")
+            encoder = "AV1"
+        else if (text === "h264")
+            encoder = "H.264"
+        if (grabBind && (text === "h264" || text === "hevc" || text === "av1"))
+            Files.ask("encoder\t" + text)
+    }
+
     function chooseEncoder(item) {
         if (!encoderSelectable(item))
             return
         encoder = item
+        if (!persistEncoder)
+            return
+        Files.writeText(encoderStorePath, encoderWire(item) + "\n")
+        if (grabBind)
+            Files.ask("encoder\t" + encoderWire(item))
     }
 
     function encoderMark(item) {
